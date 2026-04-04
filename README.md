@@ -27,7 +27,7 @@
 
 ```bash
 # 克隆仓库
-git clone https://github.com/starrysea1412/git-learning-platform.git
+git clone https://github.com/StarrySea1412/git-learning-platform-.git
 
 # 进入项目目录
 cd git-learning-platform
