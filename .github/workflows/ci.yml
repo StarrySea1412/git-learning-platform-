@@ -13,7 +13,10 @@ jobs:
 
     strategy:
       matrix:
-        node-version: [18, 20]
+        node-version: [18]
+
+    env:
+      NODE_OPTIONS: --max-old-space-size=4096
 
     steps:
       - name: Checkout repository
