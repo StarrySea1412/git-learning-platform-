@@ -1,0 +1,67 @@
+# Git Learning Platform 🚀
+
+一个交互式的Git学习平台，通过动画演示和实战练习帮助用户更直观地理解Git版本控制的概念和操作。
+
+## ✨ 特性
+
+- 📚 **结构化教程** - 从入门到进阶的完整Git教程
+- 🎮 **实战练习** - 交互式Git命令练习环境
+- 🎬 **动画演示** - Git工作流程可视化动画
+- 🌐 **开源免费** - MIT许可证，社区驱动
+
+## 🛠️ 技术栈
+
+- [Next.js 14](https://nextjs.org/) - React框架
+- [TypeScript](https://www.typescriptlang.org/) - 类型安全
+- [Tailwind CSS](https://tailwindcss.com/) - 样式框架
+- [Framer Motion](https://www.framer.com/motion/) - 动画库
+
+## 🚀 快速开始
+
+### 环境要求
+
+- Node.js 18.0 或更高版本
+- npm 或 yarn
+
+### 安装
+
+```bash
+# 克隆仓库
+git clone https://github.com/starrysea1412/git-learning-platform.git
+
+# 进入项目目录
+cd git-learning-platform
+
+# 安装依赖
+npm install
+
+# 启动开发服务器
+npm run dev
+```
+
+打开 [http://localhost:3000](http://localhost:3000) 查看网站。
+
+## 📁 项目结构
+
+```
+git-learning-platform/
+├── src/
+│   ├── app/              # Next.js App Router页面
+│   ├── components/       # React组件
+│   ├── lib/              # 工具函数和数据
+│   └── types/            # TypeScript类型定义
+├── public/               # 静态资源
+└── ...配置文件
+```
+
+## 🤝 贡献
+
+我们欢迎所有形式的贡献！请查看 [CONTRIBUTING.md](./CONTRIBUTING.md) 了解详情。
+
+## 📄 许可证
+
+本项目采用 MIT 许可证 - 查看 [LICENSE](./LICENSE) 文件了解详情。
+
+## 🙏 致谢
+
+感谢所有为这个项目做出贡献的开发者！
