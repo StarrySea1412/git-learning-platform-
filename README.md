@@ -1,6 +1,13 @@
 # Git Learning Platform 🚀
 
+[![CI](https://github.com/StarrySea1412/git-learning-platform-/actions/workflows/ci.yml/badge.svg)](https://github.com/StarrySea1412/git-learning-platform-/actions/workflows/ci.yml)
+
 一个交互式的Git学习平台，通过动画演示和实战练习帮助用户更直观地理解Git版本控制的概念和操作。
+
+## 📦 开源地址
+
+- GitHub：<https://github.com/StarrySea1412/git-learning-platform->
+- Gitee（国内镜像）：<https://gitee.com/starry-sea-1412/git-learning-platform>
 
 ## ✨ 特性
 
@@ -26,8 +33,11 @@
 ### 安装
 
 ```bash
-# 克隆仓库
-git clone https://github.com/StarrySea1412/git-learning-platform-.git
+# 从 GitHub 克隆
+git clone https://github.com/StarrySea1412/git-learning-platform-.git git-learning-platform
+
+# 或从 Gitee 克隆（国内访问更快）
+git clone https://gitee.com/starry-sea-1412/git-learning-platform.git git-learning-platform
 
 # 进入项目目录
 cd git-learning-platform
