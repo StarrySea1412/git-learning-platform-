@@ -209,6 +209,7 @@ git branch -d feature-login`,
     category: 'intermediate',
     difficulty: '进阶',
     duration: '20分钟',
+    relatedPracticeIds: ['push-feature', 'pull-teammate-changes', 'push-rejected-recovery'],
     content: [
       {
         title: '管理远程仓库',
@@ -236,6 +237,86 @@ git pull origin main
 
 # 获取远程更新（不合并）
 git fetch origin`,
+      }
+    ]
+  },
+  {
+    id: 'git-collaboration',
+    title: '多人协作',
+    description: '学习如何与队友协作开发：Fork、Pull Request、代码审查和推送冲突的处理',
+    category: 'intermediate',
+    difficulty: '进阶',
+    duration: '25分钟',
+    relatedPracticeIds: ['push-feature', 'pull-teammate-changes', 'push-rejected-recovery'],
+    content: [
+      {
+        title: '克隆与 Fork 的区别',
+        content: '和他人协作的前提是把代码放到一个大家都能访问的地方（如 GitHub），然后各自复制一份：\n\n- Clone（克隆）：把远程仓库复制到本地。如果你对仓库有写权限，克隆下来就能直接推送。\n- Fork（复刻）：在 GitHub 上把别人的仓库复制一份到你自己的账号下。你没有原仓库的写权限时（参与开源项目），先 Fork，再克隆你自己的那份。',
+        codeExample: `# 有写权限：直接克隆团队仓库
+git clone https://github.com/team/project.git
+
+# 没有写权限：先在 GitHub 页面上点 Fork
+# 然后克隆你自己账号下的副本
+git clone https://github.com/you/project.git
+
+# 给自己的副本配置上游，方便以后同步原仓库
+git remote add upstream https://github.com/team/project.git
+git remote -v`,
+        tips: ['Fork 是"服务器端的复制"，Clone 是"复制到本地"', 'Fork 别人的仓库后，记得用 upstream 指向原仓库，方便同步更新']
+      },
+      {
+        title: '功能分支工作流（GitHub Flow）',
+        content: '多人共用一个仓库时，最常见的约定是：谁也不要直接往 main 上提交，每个功能、每个修复都走自己的分支，完成后通过 Pull Request 合并：\n\n1. 从最新的 main 拉出功能分支\n2. 在分支上开发并提交\n3. 推送分支到远程\n4. 发起 Pull Request\n5. 队友审查（Review）通过后合并\n6. 删除功能分支',
+        codeExample: `# 1. 从最新 main 拉出功能分支
+git switch main
+git pull origin main
+git switch -c feature-search
+
+# 2. 开发并提交（可多次）
+git add .
+git commit -m "feat: add search box"
+
+# 3. 推送到远程并建立跟踪
+git push -u origin feature-search
+
+# 4. 打开 GitHub 仓库页面，点击
+#    "Compare & pull request" 发起 PR`,
+        tips: ['分支命名带上功能说明，如 feature-search、fix-login-bug', 'PR 保持小而聚焦，审查起来快，合并也快']
+      },
+      {
+        title: 'Pull Request 与代码审查',
+        content: 'Pull Request（PR）是"请求对方拉取并合并你的分支"，它把代码审查变成了协作的核心环节：\n\n- 审查者逐行评论，提出修改建议\n- 你根据意见继续提交，PR 会自动更新\n- 审查通过后由维护者合并：可以保留 merge commit，也可以 squash 压成一个提交\n- 合并后删除功能分支，保持仓库整洁',
+        codeExample: `# 根据审查意见修改后，推送到同一个分支即可
+git add .
+git commit -m "refactor: address review comments"
+git push
+
+# PR 会自动包含新提交，不需要重新发起
+
+# 如果希望 PR 历史更干净，可以整理后再推
+git rebase -i main
+git push --force-with-lease origin feature-search`,
+        tips: ['改写已推送的历史要用 --force-with-lease，且只限自己的功能分支', '公共分支（main）永远不要 force push']
+      },
+      {
+        title: '和队友同步：推送冲突的处理',
+        content: '多人同时往同一个分支推送时，Git 会拒绝"会覆盖别人工作"的推送（non-fast-forward）。标准处理流程是：先 fetch 看清楚远程发生了什么，再 pull 整合，最后重新推送：',
+        codeExample: `# 你的推送被拒绝了
+git push origin main
+# ! [rejected] main -> main (non-fast-forward)
+# hint: 远程包含你本地还没有的工作
+
+# 1. 先获取远程更新，看看队友改了什么
+git fetch origin
+git log --oneline main..origin/main
+
+# 2. 把远程工作整合进来（产生合并提交）
+git pull origin main
+# 如果有冲突：解决冲突 -> git add -> git commit
+
+# 3. 现在本地已经包含队友的提交，重新推送
+git push origin main`,
+        tips: ['推送被拒不是错误，是 Git 在保护队友的工作', '日常养成 push 前先 pull 的习惯，能把冲突消灭在本地', '永远不要用 --force 推送共享分支来"绕过"拒绝']
       }
     ]
   },

@@ -8,7 +8,8 @@ export type AnimationId =
   | 'stash'
   | 'bisect'
   | 'workflow'
-  | 'conflict';
+  | 'conflict'
+  | 'collaboration';
 
 export interface AnimationScene {
   id: AnimationId;
@@ -159,6 +160,20 @@ export const animationScenes: Record<AnimationId, AnimationScene> = {
     pitfall: '只顾着删掉冲突标记，却没确认最终代码逻辑是否同时保住了两边真正需要的修改。',
     relatedPracticeIds: ['merge-branch', 'rebase-branch'],
   },
+  collaboration: {
+    id: 'collaboration',
+    title: '和队友隔着远程仓库协作',
+    summary: '看懂 origin 是什么、推送为什么会被拒绝，以及 fetch → pull → push 的日常同步闭环。',
+    scenario: '你和队友共享同一个远程仓库。你完成了一次提交准备推送，队友却抢先往 origin/main 推了新提交。',
+    keyCommands: ['git push origin main', 'git fetch origin', 'git pull origin main'],
+    focusPoints: [
+      'origin/main 是"远程分支在你本地的镜像"，fetch 负责把它更新到最新。',
+      '推送被拒（non-fast-forward）说明远程有你没有的提交，Git 在保护队友的工作。',
+      'pull = fetch + merge，整合远程更改后再推送，历史才不会互相覆盖。',
+    ],
+    pitfall: '看到推送被拒就 force push，会把队友的提交直接抹掉；正确动作永远是先 fetch、再整合。',
+    relatedPracticeIds: ['push-feature', 'pull-teammate-changes', 'push-rejected-recovery'],
+  },
 };
 
 export const animationSections: AnimationSection[] = [
@@ -178,7 +193,7 @@ export const animationSections: AnimationSection[] = [
     id: 'scenarios',
     title: '实战场景',
     description: '把多个命令串成真实工作流，建立“为什么现在要做这一步”的判断。',
-    animationIds: ['workflow', 'conflict'],
+    animationIds: ['workflow', 'conflict', 'collaboration'],
   },
 ];
 

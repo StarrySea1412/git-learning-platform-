@@ -23,12 +23,12 @@ const features = [
   },
   {
     title: '可交互练习',
-    description: '在模拟终端中练习真实支持的 Git 命令，把功能开发、热修发版、误操作自救等场景真正走一遍。',
+    description: '在模拟终端中练习真实支持的 Git 命令，把分支开发、多人协作、推送冲突、误操作自救等场景真正走一遍。',
     href: '/practice',
   },
   {
     title: '动画演示',
-    description: '先用可视化动画看懂分支、合并、变基、stash 等场景，再顺手跳去对应练习。',
+    description: '先用可视化动画看懂分支、合并、变基、远程协作等场景，再顺手跳去对应练习。',
     href: '/animations',
   },
 ];

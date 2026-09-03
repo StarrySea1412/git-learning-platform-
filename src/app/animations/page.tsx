@@ -43,6 +43,12 @@ const animationComponents = {
   conflict: dynamic(() => import('@/components/animations/ConflictAnimation'), {
     loading: () => <Skeleton />,
   }),
+  collaboration: dynamic(
+    () => import('@/components/animations/CollaborationAnimation'),
+    {
+      loading: () => <Skeleton />,
+    }
+  ),
 } as const satisfies Record<AnimationId, ComponentType>;
 
 function Skeleton() {

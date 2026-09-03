@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  createCollaborationState,
   createInitialState,
   executeCommand,
   getHeadBranch,
@@ -131,5 +132,98 @@ describe('git-simulator', () => {
 
     expect(validDelete.ok).toBe(true);
     expect(validDelete.state.branches.has('feature')).toBe(false);
+  });
+});
+
+describe('git-simulator 远程协作', () => {
+  it('lists local and remote-tracking branches with git branch -a', () => {
+    const state = createCollaborationState({ sharedMessages: ['setup project'] });
+    const result = executeCommand(state, 'git branch -a');
+
+    expect(result.ok).toBe(true);
+    expect(result.output).toContain('* main');
+    expect(result.output).toContain('remotes/origin/main');
+  });
+
+  it('shows ahead info in git status when local is ahead of origin', () => {
+    const state = createCollaborationState({
+      sharedMessages: ['setup project'],
+      localMessages: ['local: update readme'],
+    });
+    const result = executeCommand(state, 'git status');
+
+    expect(result.ok).toBe(true);
+    expect(result.output).toContain('领先');
+  });
+
+  it('fetches teammate commits without merging them', () => {
+    const state = createCollaborationState({
+      sharedMessages: ['setup project'],
+      teammateMessages: ['teammate: add docs'],
+    });
+    const trackingBefore = state.remoteTracking.get('origin/main');
+    const mainBefore = state.branches.get('main');
+    const result = executeCommand(state, 'git fetch origin');
+
+    expect(result.ok).toBe(true);
+    const trackingAfter = result.state.remoteTracking.get('origin/main');
+    expect(trackingAfter).not.toBe(trackingBefore);
+    expect(result.state.commits.has(trackingAfter ?? '')).toBe(true);
+    expect(result.output).toContain('origin/main');
+    expect(result.state.branches.get('main')).toBe(mainBefore);
+  });
+
+  it('fast-forwards local main with git pull', () => {
+    const state = createCollaborationState({
+      sharedMessages: ['setup project'],
+      teammateMessages: ['teammate: add docs'],
+    });
+    const result = executeCommand(state, 'git pull origin main');
+    const mainHead = result.state.branches.get('main');
+
+    expect(result.ok).toBe(true);
+    expect(mainHead).toBe(result.state.remote?.branches.get('main'));
+    expect(mainHead).not.toBe(state.branches.get('main'));
+  });
+
+  it('pushes a new branch and sets up tracking', () => {
+    let state = createCollaborationState({ sharedMessages: ['setup project'] });
+    state = executeCommand(state, 'git checkout -b feature').state;
+    state = { ...state, staging: true };
+    state = executeCommand(state, 'git commit -m "feature work"').state;
+
+    const featureHead = state.branches.get('feature');
+    const result = executeCommand(state, 'git push -u origin feature');
+
+    expect(result.ok).toBe(true);
+    expect(result.state.remote?.branches.get('feature')).toBe(featureHead);
+    expect(result.state.upstream.get('feature')).toBe('origin/feature');
+  });
+
+  it('rejects a non-fast-forward push and recovers with pull then push', () => {
+    const state = createCollaborationState({
+      sharedMessages: ['setup project'],
+      localMessages: ['local: update readme'],
+      teammateMessages: ['teammate: fix navbar'],
+    });
+
+    const rejected = executeCommand(state, 'git push origin main');
+    expect(rejected.ok).toBe(false);
+    expect(rejected.output).toContain('non-fast-forward');
+    expect(rejected.state.remote?.branches.get('main')).toBe(
+      state.remote?.branches.get('main')
+    );
+
+    const merged = executeCommand(rejected.state, 'git pull origin main');
+    expect(merged.ok).toBe(true);
+    const mergedHeadId = getHeadCommit(merged.state);
+    const mergedHead = mergedHeadId
+      ? merged.state.commits.get(mergedHeadId)
+      : null;
+    expect(mergedHead?.parents).toHaveLength(2);
+
+    const pushed = executeCommand(merged.state, 'git push origin main');
+    expect(pushed.ok).toBe(true);
+    expect(pushed.state.remote?.branches.get('main')).toBe(mergedHeadId);
   });
 });

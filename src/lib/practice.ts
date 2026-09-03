@@ -1,4 +1,5 @@
 import {
+  createCollaborationState,
   createInitialState,
   executeCommand,
   getHeadBranch,
@@ -11,6 +12,7 @@ export type PracticeDifficulty = '入门' | '进阶' | '高级';
 export type PracticeTopic =
   | '基础命令'
   | '分支协作'
+  | '远程协作'
   | '提交搬运'
   | '历史整理'
   | '恢复与切换'
@@ -81,6 +83,15 @@ function cloneStateMaps(state: GitState): GitState {
     ...state,
     commits: new Map(state.commits),
     branches: new Map(state.branches),
+    remote: state.remote
+      ? {
+          url: state.remote.url,
+          commits: new Map(state.remote.commits),
+          branches: new Map(state.remote.branches),
+        }
+      : null,
+    remoteTracking: new Map(state.remoteTracking),
+    upstream: new Map(state.upstream),
   };
 }
 
@@ -206,6 +217,33 @@ export function evaluateInteractivePracticeCommand(
     };
   }
 
+  const passed = step.validate({
+    command,
+    previousState,
+    nextState: result.state,
+    result,
+    stepIndex,
+  });
+
+  if (passed) {
+    const nextStepIndex = stepIndex + 1;
+    if (nextStepIndex >= task.steps.length) {
+      return {
+        advanced: true,
+        completed: true,
+        nextStepIndex,
+        feedback: task.successMessage,
+      };
+    }
+
+    return {
+      advanced: true,
+      completed: false,
+      nextStepIndex,
+      feedback: `步骤 ${stepIndex + 1} 已完成。\n下一步：${task.steps[nextStepIndex].instruction}`,
+    };
+  }
+
   if (!result.ok) {
     return {
       advanced: false,
@@ -215,38 +253,11 @@ export function evaluateInteractivePracticeCommand(
     };
   }
 
-  const passed = step.validate({
-    command,
-    previousState,
-    nextState: result.state,
-    result,
-    stepIndex,
-  });
-
-  if (!passed) {
-    return {
-      advanced: false,
-      completed: false,
-      nextStepIndex: stepIndex,
-      feedback: `这条命令执行了，但仓库状态还没有达到本步骤目标。提示：${step.hint}`,
-    };
-  }
-
-  const nextStepIndex = stepIndex + 1;
-  if (nextStepIndex >= task.steps.length) {
-    return {
-      advanced: true,
-      completed: true,
-      nextStepIndex,
-      feedback: task.successMessage,
-    };
-  }
-
   return {
-    advanced: true,
+    advanced: false,
     completed: false,
-    nextStepIndex,
-    feedback: `步骤 ${stepIndex + 1} 已完成。\n下一步：${task.steps[nextStepIndex].instruction}`,
+    nextStepIndex: stepIndex,
+    feedback: `这条命令执行了，但仓库状态还没有达到本步骤目标。提示：${step.hint}`,
   };
 }
 
@@ -448,7 +459,7 @@ export const practiceTasks: PracticeTask[] = [
     topic: '分支协作',
     prerequisiteIds: ['create-branch'],
     estimatedMinutes: 10,
-    nextTaskId: 'cherry-pick-commit',
+    nextTaskId: 'push-feature',
     successMessage: '🎉 合并完成，你已经看到了一个真实的 merge commit。',
     contextNote:
       'main 和 feature 已经各自前进了一次提交，现在需要在 main 上执行合并。',
@@ -483,6 +494,154 @@ export const practiceTasks: PracticeTask[] = [
             nextHead.message === "Merge branch 'feature'"
           );
         },
+      },
+    ],
+  },
+  {
+    id: 'push-feature',
+    mode: 'interactive',
+    title: '推送功能分支到远程',
+    description: '把本地 feature 分支推送到 origin，并建立跟踪关系，让队友看到你的工作。',
+    difficulty: '进阶',
+    topic: '远程协作',
+    prerequisiteIds: ['merge-branch'],
+    estimatedMinutes: 8,
+    nextTaskId: 'pull-teammate-changes',
+    successMessage: '🎉 feature 分支已经推送到远程，队友现在可以检出你的分支继续协作了。',
+    contextNote:
+      '这个仓库已经克隆自远程仓库：origin 已配置，main 与远程保持同步。你要把新功能推上去给队友看。',
+    terminalIntro: '任务：创建 feature 分支，完成一次提交，然后推送并建立跟踪关系。',
+    createInitialState: () =>
+      createCollaborationState({
+        sharedMessages: ['setup ci', 'add landing page'],
+      }),
+    steps: [
+      {
+        instruction: '创建并切换到新分支 feature。',
+        acceptedCommands: ['git checkout -b feature'],
+        hint: '使用 git checkout -b feature，一步创建并切换。',
+        validate: ({ nextState }) => getHeadBranch(nextState) === 'feature',
+      },
+      {
+        instruction: '在 feature 分支上完成一次提交，提交信息为 "add login form"。',
+        acceptedCommands: [
+          'git commit --allow-empty -m "add login form"',
+          "git commit --allow-empty -m 'add login form'",
+        ],
+        hint: '沙盒允许空提交：git commit --allow-empty -m "add login form"。',
+        validate: ({ nextState }) => getHeadMessage(nextState) === 'add login form',
+      },
+      {
+        instruction: '把 feature 推送到远程，并建立跟踪关系。',
+        acceptedCommands: ['git push -u origin feature'],
+        hint: '首次推送使用 git push -u origin feature，-u 会建立跟踪关系。',
+        validate: ({ nextState }) => {
+          const headId = getHeadCommit(nextState);
+          return (
+            nextState.remote?.branches.get('feature') === headId &&
+            nextState.upstream.get('feature') === 'origin/feature'
+          );
+        },
+      },
+    ],
+  },
+  {
+    id: 'pull-teammate-changes',
+    mode: 'interactive',
+    title: '同步队友推送的更新',
+    description: '队友把新提交推到了 origin/main，先 fetch 观察，再合并进本地。',
+    difficulty: '进阶',
+    topic: '远程协作',
+    prerequisiteIds: ['push-feature'],
+    estimatedMinutes: 8,
+    nextTaskId: 'push-rejected-recovery',
+    successMessage: '🎉 队友的工作已经同步到本地 main，这就是团队日常同步的基本节奏。',
+    contextNote:
+      '队友刚刚往 origin/main 推送了一个提交，但你本地的 origin/main 还停留在旧位置。本地工作区是干净的。',
+    terminalIntro: '任务：先用 git fetch 查看远程更新，再把 origin/main 合并进本地 main。',
+    createInitialState: () =>
+      createCollaborationState({
+        sharedMessages: ['setup project'],
+        teammateMessages: ['teammate: add user docs'],
+      }),
+    steps: [
+      {
+        instruction: '从远程获取最新状态（只下载，不合并）。',
+        acceptedCommands: ['git fetch', 'git fetch origin'],
+        hint: '使用 git fetch 或 git fetch origin。',
+        validate: ({ previousState, nextState }) =>
+          nextState.remoteTracking.get('origin/main') !==
+          previousState.remoteTracking.get('origin/main'),
+      },
+      {
+        instruction: '把 origin/main 合并进当前分支，让本地 main 快进到远程最新位置。',
+        acceptedCommands: ['git merge origin/main', 'git pull origin main'],
+        hint: '使用 git merge origin/main，或用 git pull origin main 一步完成。',
+        validate: ({ previousState, nextState }) => {
+          const trackingId = nextState.remoteTracking.get('origin/main');
+          const mainHead = nextState.branches.get('main');
+
+          return (
+            Boolean(trackingId) &&
+            mainHead === trackingId &&
+            previousState.branches.get('main') !== trackingId
+          );
+        },
+      },
+    ],
+  },
+  {
+    id: 'push-rejected-recovery',
+    mode: 'interactive',
+    title: '推送被拒后的自救',
+    description: '本地和远程各自前进时，体验 non-fast-forward 拒绝，整合远程更改后重新推送。',
+    difficulty: '高级',
+    topic: '远程协作',
+    prerequisiteIds: ['pull-teammate-changes'],
+    estimatedMinutes: 10,
+    nextTaskId: 'cherry-pick-commit',
+    successMessage: '🎉 推送冲突处理完毕：被拒 → fetch → pull 整合 → 再推送，这是多人协作最常见的闭环。',
+    contextNote:
+      '你在本地 main 上完成了一次提交，而队友也往 origin/main 推送了一个提交，两边已经分叉。',
+    terminalIntro: '任务：先尝试推送（会被拒绝），然后整合远程更改，最后重新推送成功。',
+    createInitialState: () =>
+      createCollaborationState({
+        sharedMessages: ['setup project'],
+        localMessages: ['local: update readme'],
+        teammateMessages: ['teammate: fix navbar'],
+      }),
+    steps: [
+      {
+        instruction: '直接尝试推送 main，观察 Git 的拒绝信息（这一步的失败是预期内的）。',
+        acceptedCommands: ['git push origin main'],
+        hint: '执行 git push origin main，注意输出里的 non-fast-forward。',
+        validate: ({ result }) =>
+          !result.ok && result.output.includes('non-fast-forward'),
+      },
+      {
+        instruction: '把远程的提交拉取下来，与本地 main 合并。',
+        acceptedCommands: ['git pull origin main'],
+        hint: '使用 git pull origin main，Git 会生成一个合并提交。',
+        validate: ({ previousState, nextState }) => {
+          const nextHeadId = getHeadCommit(nextState);
+          const nextHead = nextHeadId ? nextState.commits.get(nextHeadId) : null;
+
+          return (
+            nextHead?.parents.length === 2 &&
+            (nextHead?.message ?? '').includes(
+              "Merge remote-tracking branch 'origin/main'"
+            ) &&
+            previousState.branches.get('main') !== nextHeadId
+          );
+        },
+      },
+      {
+        instruction: '重新推送 main，这一次应该成功。',
+        acceptedCommands: ['git push origin main'],
+        hint: '再次执行 git push origin main。',
+        validate: ({ nextState }) =>
+          getHeadBranch(nextState) === 'main' &&
+          nextState.remote?.branches.get('main') === getHeadCommit(nextState),
       },
     ],
   },
@@ -1121,6 +1280,13 @@ export const practiceSections: PracticeSection[] = [
     description: '理解分支创建、切换和合并，是后续高级场景的前置能力。',
     kind: 'core',
     taskIds: ['create-branch', 'merge-branch'],
+  },
+  {
+    id: 'core-remote',
+    title: '远程协作',
+    description: '和队友共享同一个远程仓库：推送自己的工作、同步别人的进度、处理推送冲突。',
+    kind: 'core',
+    taskIds: ['push-feature', 'pull-teammate-changes', 'push-rejected-recovery'],
   },
   {
     id: 'lab-transfer',

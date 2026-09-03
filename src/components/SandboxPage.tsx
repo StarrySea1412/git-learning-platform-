@@ -70,7 +70,7 @@ export default function SandboxPage() {
             onCommand={handleCommand}
             initialOutput={[
               '欢迎来到自由沙盒。',
-              '支持的命令：git status / add / commit / log / branch / checkout / switch / merge / rebase / reset / revert / cherry-pick / stash / reflog',
+              '支持的命令：git status / add / commit / log / branch / checkout / switch / merge / rebase / reset / revert / cherry-pick / stash / reflog / remote / fetch / pull / push',
               '如果不确定从哪开始，先试试 git status。',
             ].join('\n')}
             resetKey={resetKey}
