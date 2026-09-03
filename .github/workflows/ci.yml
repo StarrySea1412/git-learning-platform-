@@ -13,7 +13,8 @@ jobs:
 
     strategy:
       matrix:
-        node-version: [18]
+        # vitest 4 要求 Node >= 20，且测试脚本使用 --configLoader native（需要较新的 Node）
+        node-version: [22]
 
     env:
       NODE_OPTIONS: --max-old-space-size=4096
