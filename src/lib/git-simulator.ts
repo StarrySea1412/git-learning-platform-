@@ -451,8 +451,30 @@ function getAheadBehind(
   };
 }
 
-function buildStatusOutput(state: GitState): string {
+function buildStatusOutput(state: GitState, short = false): string {
   const branch = getHeadBranch(state);
+  const aheadBehind = branch ? getAheadBehind(state, branch) : null;
+
+  if (short) {
+    const lines: string[] = [];
+    if (state.staging) {
+      lines.push('A  example.txt');
+    }
+    if (state.workingTreeDirty) {
+      lines.push(' M example.txt');
+    }
+    if (branch && aheadBehind) {
+      if (aheadBehind.behind > 0) {
+        lines.push(`## ${branch}...${state.upstream.get(branch)} [behind ${aheadBehind.behind}]`);
+      } else if (aheadBehind.ahead > 0) {
+        lines.push(`## ${branch}...${state.upstream.get(branch)} [ahead ${aheadBehind.ahead}]`);
+      } else {
+        lines.push(`## ${branch}...${state.upstream.get(branch)}`);
+      }
+    }
+    return lines.length > 0 ? lines.join('\n') : '';
+  }
+
   const branchLine = branch
     ? `位于分支 ${branch}`
     : 'HEAD 处分离状态（detached HEAD）';
@@ -852,7 +874,7 @@ export function executeCommand(state: GitState, input: string): ExecResult {
     return unsupported(state, '当前沙盒仅支持 Git 命令。');
   }
 
-  if (command === 'git init') {
+  if (command === 'git init' || /^git init \S+$/.test(command)) {
     return success(createInitialState(), '已初始化一个新的 Git 仓库。');
   }
 
@@ -899,12 +921,27 @@ export function executeCommand(state: GitState, input: string): ExecResult {
     return createCommitFromHead(state, message, `commit: ${message}`);
   }
 
-  if (parts[1] === 'status') {
-    return success(state, buildStatusOutput(state));
+  if (parts[1] === 'status' && (parts.length === 2 || parts[2] === '-s' || parts[2] === '--short')) {
+    return success(state, buildStatusOutput(state, parts[2] === '-s' || parts[2] === '--short'));
   }
 
   if (parts[1] === 'log') {
-    return success(state, buildLogOutput(state, command.includes('--oneline')));
+    const rest = parts.slice(2);
+    const allowedFlags = new Set([
+      '--oneline',
+      '--graph',
+      '--all',
+      '-n',
+    ]);
+    const unknownFlag = rest.find(
+      (token) => token.startsWith('-') && !allowedFlags.has(token) && !/^-\d+$/.test(token)
+    );
+
+    if (unknownFlag) {
+      return unsupported(state, getUnsupportedMessage(command));
+    }
+
+    return success(state, buildLogOutput(state, rest.includes('--oneline')));
   }
 
   if (
@@ -990,6 +1027,54 @@ export function executeCommand(state: GitState, input: string): ExecResult {
       headId
     );
     return success(withReflog, `已创建并切换到分支 "${name}"。`);
+  }
+
+  if (parts[1] === 'switch' && parts[2] === '-c' && parts.length === 4) {
+    const name = parts[3];
+    if (state.branches.has(name)) {
+      return invalid(state, `分支 "${name}" 已存在。`);
+    }
+
+    const headId = getHeadCommit(state);
+    if (!headId) {
+      return invalid(state, '当前 HEAD 无法解析到任何提交。');
+    }
+
+    const next = cloneState(state);
+    next.branches.set(name, headId);
+    next.HEAD = `ref: ${name}`;
+
+    const withReflog = appendReflog(
+      next,
+      `switch: ${getHeadLabel(state)} -> ${name}`,
+      headId,
+      headId
+    );
+    return success(withReflog, `已创建并切换到新分支 "${name}"。`);
+  }
+
+  if (parts[1] === 'switch' && parts.length === 3) {
+    const target = parts[2];
+    const previousCommit = getHeadCommit(state);
+    if (!previousCommit) {
+      return invalid(state, '当前 HEAD 无法解析到任何提交。');
+    }
+
+    if (!state.branches.has(target)) {
+      return invalid(state, `分支 "${target}" 不存在。`);
+    }
+
+    const targetCommit = state.branches.get(target)!;
+    const next = cloneState(state);
+    next.HEAD = `ref: ${target}`;
+
+    const withReflog = appendReflog(
+      next,
+      `switch: ${getHeadLabel(state)} -> ${target}`,
+      previousCommit,
+      targetCommit
+    );
+    return success(withReflog, `已切换到分支 "${target}"。`);
   }
 
   if (parts[1] === 'checkout' && parts.length === 3) {
