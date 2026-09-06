@@ -18,7 +18,8 @@ describe('思维导图命令覆盖', () => {
     ['git switch main', 'ok'],
     ['git init /path/to/project', 'ok'],
     ['git config --global user.name x', 'unsupported'],
-    ['git clone https://github.com/user/repo.git', 'unsupported'],
+    // clone 现已支持：会真正建立远程跟踪
+    ['git clone https://github.com/user/repo.git', 'ok'],
   ] as const)('%s', (command, expected) => {
     const result = executeCommand(createInitialState(), command);
 

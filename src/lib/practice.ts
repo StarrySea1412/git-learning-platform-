@@ -398,25 +398,47 @@ export const practiceTasks: PracticeTask[] = [
   },
   {
     id: 'git-clone',
-    mode: 'conceptual',
-    title: '克隆仓库',
-    description: '理解如何从远程地址克隆一个仓库。',
+    mode: 'interactive',
+    title: '克隆远程仓库',
+    description: '用 git clone 把远程仓库完整复制到本地，并认识 origin。',
     difficulty: '入门',
     topic: '基础命令',
     prerequisiteIds: ['git-log'],
-    estimatedMinutes: 4,
+    estimatedMinutes: 6,
     nextTaskId: 'create-branch',
-    successMessage: '你已经理解了 git clone 的基本命令结构。',
-    conceptNote:
-      '这是概念练习，本轮不提供图形模拟，也不会计入完成进度。',
-    instructions: ['掌握 git clone 会把远程仓库及其历史复制到本地。'],
-    hints: [
-      '命令结构是 git clone <远程地址>。',
-      '也可以在命令尾部指定一个本地目录名。',
-    ],
-    referenceCommands: [
-      'git clone https://github.com/user/repo.git',
-      'git clone https://github.com/user/repo.git my-folder',
+    successMessage: '🎉 你已经把远程仓库克隆到本地，后续的分支和远程练习都建立在这个动作上。',
+    contextNote:
+      '你即将从远程地址克隆一个团队仓库。clone 会复制完整历史并自动配置 origin 跟踪。',
+    terminalIntro: '任务：克隆团队仓库，然后确认克隆结果。',
+    createInitialState: () => createInitialState(),
+    steps: [
+      {
+        instruction: '克隆远程仓库 https://github.com/team/project.git。',
+        acceptedCommands: ['git clone https://github.com/team/project.git'],
+        hint: '使用 git clone <远程地址>。',
+        validate: ({ nextState }) =>
+          nextState.remote?.url === 'https://github.com/team/project.git' &&
+          nextState.branches.has('main') &&
+          nextState.remoteTracking.has('origin/main'),
+      },
+      {
+        instruction: '查看远程仓库配置，确认 origin 已经自动设置。',
+        acceptedCommands: ['git remote -v'],
+        hint: '使用 git remote -v 查看远程地址。',
+        validate: ({ result }) =>
+          result.ok &&
+          result.output.includes('origin') &&
+          result.output.includes('team/project.git'),
+      },
+      {
+        instruction: '查看所有分支（含远程分支），确认 origin/main 存在。',
+        acceptedCommands: ['git branch -a'],
+        hint: '使用 git branch -a。',
+        validate: ({ result }) =>
+          result.ok &&
+          result.output.includes('* main') &&
+          result.output.includes('remotes/origin/main'),
+      },
     ],
   },
   {
@@ -1270,7 +1292,7 @@ export const practiceSections: PracticeSection[] = [
   {
     id: 'core-basics',
     title: '基础起步',
-    description: '先把仓库、状态、暂存、提交和历史这些核心动作跑通。',
+    description: '先把仓库、克隆、状态、暂存、提交和历史这些核心动作跑通。',
     kind: 'core',
     taskIds: ['git-init', 'git-status', 'git-add', 'git-commit', 'git-log', 'git-clone'],
   },

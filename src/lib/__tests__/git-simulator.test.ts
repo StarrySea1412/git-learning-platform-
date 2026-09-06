@@ -136,6 +136,20 @@ describe('git-simulator', () => {
 });
 
 describe('git-simulator 远程协作', () => {
+  it('clones a remote repository and configures origin tracking', () => {
+    const result = executeCommand(
+      createInitialState(),
+      'git clone https://github.com/team/project.git'
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.output).toContain("Cloning into 'project'");
+    expect(result.state.remote?.url).toBe('https://github.com/team/project.git');
+    expect(result.state.remoteTracking.has('origin/main')).toBe(true);
+    expect(getHeadBranch(result.state)).toBe('main');
+    expect(result.state.reflog[0]?.action).toContain('clone');
+  });
+
   it('lists local and remote-tracking branches with git branch -a', () => {
     const state = createCollaborationState({ sharedMessages: ['setup project'] });
     const result = executeCommand(state, 'git branch -a');

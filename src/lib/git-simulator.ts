@@ -878,6 +878,33 @@ export function executeCommand(state: GitState, input: string): ExecResult {
     return success(createInitialState(), '已初始化一个新的 Git 仓库。');
   }
 
+  if (parts[1] === 'clone' && parts.length >= 3) {
+    const url = parts[2];
+    const nameMatch = url.match(/\/([^/]+?)(?:\.git)?\/?$/);
+    const repoName = parts[3] ?? nameMatch?.[1] ?? 'repo';
+
+    // 克隆 = 在本地重建远程的全部历史，并配置 origin 跟踪
+    const cloned = createCollaborationState({ url });
+    const next = cloneState(cloned);
+    next.HEAD = 'ref: main';
+
+    const reflog = appendReflog(
+      next,
+      `clone: from ${url}`,
+      null,
+      next.remoteTracking.get('origin/main') ?? null
+    );
+    return success(
+      reflog,
+      [
+        `Cloning into '${repoName}'...`,
+        'remote: Enumerating objects: done, done.',
+        `已克隆远程仓库 "${url}"，并配置 origin 跟踪。`,
+        `当前位于 main 分支，跟踪 origin/main。`,
+      ].join('\n')
+    );
+  }
+
   if (
     command === 'git add .' ||
     command === 'git add --all' ||
@@ -1461,7 +1488,6 @@ export function executeCommand(state: GitState, input: string): ExecResult {
   }
 
   const unsupportedFamilies = new Set([
-    'clone',
     'submodule',
     'worktree',
     'config',
