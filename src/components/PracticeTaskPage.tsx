@@ -42,6 +42,8 @@ export default function PracticeTaskPage({ id }: PracticeTaskPageProps) {
   const [resetKey, setResetKey] = useState(0);
   /** 最近一次答错时的教学卡片内容（答对后清除） */
   const [lastTeaching, setLastTeaching] = useState<string | null>(null);
+  /** 步骤完成的脉冲动画计数 */
+  const [stepPulse, setStepPulse] = useState(0);
   const [gitState, setGitState] = useState<GitState>(() =>
     task && isInteractiveTask(task) ? task.createInitialState() : createInitialState()
   );
@@ -76,6 +78,7 @@ export default function PracticeTaskPage({ id }: PracticeTaskPageProps) {
     setShowHints(false);
     setShowAnswers(false);
     setLastTeaching(null);
+    setStepPulse(0);
     setGitState(task.createInitialState());
     setResetKey((value) => value + 1);
   }, [id, task]);
@@ -128,6 +131,8 @@ export default function PracticeTaskPage({ id }: PracticeTaskPageProps) {
       if (evaluation.advanced) {
         setCurrentStep(evaluation.nextStepIndex);
         setLastTeaching(null);
+        // 触发"步骤完成"脉冲动画
+        setStepPulse((value) => value + 1);
       } else if (evaluation.teaching) {
         setLastTeaching(evaluation.teaching);
       }
@@ -155,6 +160,7 @@ export default function PracticeTaskPage({ id }: PracticeTaskPageProps) {
     setShowHints(false);
     setShowAnswers(false);
     setLastTeaching(null);
+    setStepPulse(0);
     setGitState(task.createInitialState());
     setResetKey((value) => value + 1);
   }, [task]);
@@ -259,14 +265,26 @@ export default function PracticeTaskPage({ id }: PracticeTaskPageProps) {
                 {interactive && (
                   <div className="mb-6">
                     <div className="mb-1 flex items-baseline justify-between text-xs text-gray-500 dark:text-gray-400">
-                      <span>
-                        进度：步骤 {Math.min(currentStep + 1, task.steps.length)} / {task.steps.length}
-                      </span>
+                      <motion.span
+                        key={stepPulse}
+                        initial={stepPulse > 0 ? { scale: 1.3, color: '#10b981' } : false}
+                        animate={{ scale: 1 }}
+                        transition={{ duration: 0.4 }}
+                        className="font-medium"
+                      >
+                        {stepPulse > 0
+                          ? `✓ 步骤 ${currentStep} 完成！`
+                          : `进度：步骤 ${Math.min(currentStep + 1, task.steps.length)} / ${task.steps.length}`}
+                      </motion.span>
                       <span>{Math.round((currentStep / task.steps.length) * 100)}%</span>
                     </div>
                     <div className="h-1.5 overflow-hidden rounded-full bg-gray-100 dark:bg-gray-700">
-                      <div
-                        className="h-full rounded-full bg-primary-500 transition-all duration-500"
+                      <motion.div
+                        className={`h-full rounded-full transition-all duration-500 ${
+                          stepPulse > 0 && currentStep === 0
+                            ? 'bg-green-500'
+                            : 'bg-primary-500'
+                        }`}
                         style={{ width: `${(currentStep / task.steps.length) * 100}%` }}
                       />
                     </div>

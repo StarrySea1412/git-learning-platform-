@@ -14,13 +14,35 @@ interface TerminalProps {
   initialOutput?: string;
   helperText?: string;
   resetKey?: number;
+  /** 可用于 Tab 补全的命令词表 */
+  completionWords?: string[];
 }
+
+/** 内置的 Git 命令补全词表 */
+const DEFAULT_COMPLETION_WORDS = [
+  'git init', 'git clone', 'git add .', 'git add', 'git commit --allow-empty',
+  'git commit -m', 'git commit --amend -m', 'git status', 'git status -s',
+  'git log --oneline --graph --all', 'git log --oneline', 'git log',
+  'git branch -a', 'git branch -d', 'git branch -D', 'git branch -m', 'git branch',
+  'git checkout -b', 'git checkout', 'git switch -c', 'git switch -', 'git switch',
+  'git merge', 'git rebase -i HEAD~3', 'git rebase --onto', 'git rebase',
+  'git reset --soft', 'git reset --hard', 'git revert HEAD',
+  'git cherry-pick', 'git stash pop', 'git stash list', 'git stash',
+  'git reflog', 'git remote -v', 'git remote add',
+  'git fetch', 'git pull origin', 'git push -u origin', 'git push origin',
+  'git tag -d', 'git tag', 'git diff --staged', 'git diff', 'git show',
+  'git restore --staged', 'git restore', 'git worktree add', 'git worktree list',
+  'git worktree remove', 'git bisect start', 'git bisect good', 'git bisect bad',
+  'git bisect reset', 'resolve-conflict ours', 'resolve-conflict theirs',
+  'resolve-conflict both', 'resolve-conflict', 'rebase-todo apply', 'rebase-todo show',
+];
 
 export default function Terminal({
   onCommand,
   initialOutput,
-  helperText = '输入命令并按 Enter 执行，支持方向键浏览历史。',
+  helperText = '输入命令并按 Enter 执行，↑↓ 历史 · Tab 补全 · Ctrl+L 清屏。',
   resetKey,
+  completionWords = DEFAULT_COMPLETION_WORDS,
 }: TerminalProps) {
   const lineIdRef = useRef(0);
 
@@ -91,6 +113,34 @@ export default function Terminal({
     if (event.key === 'l' && (event.ctrlKey || event.metaKey)) {
       event.preventDefault();
       setLines(getInitialLines());
+      return;
+    }
+
+    // Tab：补全命令。多个候选时补到最长公共前缀
+    if (event.key === 'Tab') {
+      event.preventDefault();
+      const input = currentInput;
+      if (!input) {
+        return;
+      }
+      const matches = completionWords.filter((word) => word.startsWith(input));
+      if (matches.length === 0) {
+        return;
+      }
+      if (matches.length === 1) {
+        setCurrentInput(matches[0] + ' ');
+        return;
+      }
+      // 最长公共前缀
+      let prefix = matches[0];
+      for (const match of matches.slice(1)) {
+        let i = 0;
+        while (i < prefix.length && i < match.length && prefix[i] === match[i]) {
+          i += 1;
+        }
+        prefix = prefix.slice(0, i);
+      }
+      setCurrentInput(prefix);
       return;
     }
 
