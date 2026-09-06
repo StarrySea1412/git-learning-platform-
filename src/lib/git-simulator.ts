@@ -38,6 +38,17 @@ export interface RebaseTodoItem {
   message: string;
 }
 
+export interface BisectState {
+  goodId: string;
+  badId: string;
+  /** 当前待测点；null 表示已锁定第一个坏提交 */
+  currentId: string | null;
+  /** 每一步的判定记录 */
+  log: { commitId: string; verdict: 'good' | 'bad' }[];
+  /** 找到的第一个坏提交（结束后填上） */
+  foundId: string | null;
+}
+
 export interface GitState {
   commits: Map<string, GitCommit>;
   branches: Map<string, string>;
@@ -56,6 +67,7 @@ export interface GitState {
   tags: Map<string, string>; // tag 名 -> 提交 id
   worktrees: WorktreeEntry[]; // 关联的工作树（主工作树之外的）
   rebaseTodo: RebaseTodoItem[] | null; // 交互式变基的待办清单（编辑中）
+  bisect: BisectState | null; // 二分查找进行中
   mergeConflict: MergeConflict | null; // 冲突进行中（等待 resolve-conflict）
 }
 
@@ -154,6 +166,7 @@ export function cloneState(state: GitState): GitState {
     tags: new Map(state.tags),
     worktrees: state.worktrees.map((w) => ({ ...w })),
     rebaseTodo: state.rebaseTodo ? state.rebaseTodo.map((t) => ({ ...t })) : null,
+    bisect: state.bisect ? { ...state.bisect, log: [...state.bisect.log] } : null,
     mergeConflict: state.mergeConflict ? { ...state.mergeConflict } : null,
   };
 }
@@ -190,6 +203,7 @@ export function createInitialState(
     tags: new Map(),
     worktrees: [],
     rebaseTodo: null,
+    bisect: null,
     mergeConflict: null,
   };
 }
@@ -2379,6 +2393,167 @@ export function executeCommand(state: GitState, input: string): ExecResult {
       ]
         .filter(Boolean)
         .join('\n')
+    );
+  }
+
+  // git bisect：二分查找状态机（教学沙盒，好坏判定由练习剧情给出）
+  if (parts[1] === 'bisect') {
+    const sub = parts[2];
+
+    // git bisect start
+    if (sub === 'start' && parts.length === 3) {
+      if (state.bisect) {
+        return invalid(state, '二分查找已在进行中，先执行 git bisect reset 结束。');
+      }
+
+      const headId = getHeadCommit(state);
+      if (!headId) {
+        return invalid(state, '当前 HEAD 无法解析到任何提交。');
+      }
+
+      // 初始坏点 = 当前 HEAD
+      const next = cloneState(state);
+      next.bisect = {
+        goodId: '',
+        badId: headId,
+        currentId: null,
+        log: [],
+        foundId: null,
+      };
+      return success(
+        next,
+        [
+          '已进入二分查找模式。',
+          `当前 HEAD（${headId.slice(0, 7)}）被标记为坏提交。`,
+          '接下来: git bisect good <已知的正常提交> 确定好边界。',
+        ].join('\n')
+      );
+    }
+
+    // git bisect good <ref> / git bisect bad
+    if (sub === 'good' || sub === 'bad') {
+      if (!state.bisect) {
+        return invalid(state, '未在二分查找模式，先执行 git bisect start。');
+      }
+
+      const bisect = state.bisect;
+      if (bisect.foundId) {
+        return invalid(state, '二分查找已结束，执行 git bisect reset 返回。');
+      }
+
+      if (sub === 'good') {
+        if (parts.length !== 4) {
+          return invalid(state, '请指定一个已知正常的提交: git bisect good <ref>');
+        }
+        if (bisect.goodId) {
+          return invalid(state, '好边界已确定（' + bisect.goodId.slice(0, 7) + '），之后只需 git bisect good/bad 判定当前点。');
+        }
+
+        const goodCommit = resolveCommitish(state, parts[3]);
+        if (!goodCommit || !state.commits.has(goodCommit)) {
+          return invalid(state, `无法找到提交 "${parts[3]}"。`);
+        }
+
+        const next = cloneState(state);
+        next.bisect = { ...bisect, goodId: goodCommit };
+        return success(
+          next,
+          [
+            `好边界已确定: ${goodCommit.slice(0, 7)}`,
+            'Git 将自动检出中间提交进行测试。',
+          ].join('\n')
+        );
+      }
+
+      // sub === 'bad'：对当前检出点做判定
+      if (!bisect.goodId) {
+        return invalid(state, '先确定好边界: git bisect good <已知正常的提交>');
+      }
+
+      // 判定对象：currentId（未判定过）或当前 HEAD
+      const judging = bisect.currentId ?? getHeadCommit(state);
+      if (!judging) {
+        return invalid(state, '当前 HEAD 无法解析到任何提交。');
+      }
+
+      const { goodId, badId } = bisect;
+      const linearPath: string[] = [];
+      let cursor: string | null = badId;
+      while (cursor && cursor !== goodId) {
+        const c = state.commits.get(cursor);
+        if (!c) break;
+        linearPath.push(cursor);
+        cursor = c.parents[0] ?? null;
+      }
+
+      const next = cloneState(state);
+      const newLog = [...bisect.log, { commitId: judging, verdict: 'bad' as const }];
+
+      // 可疑区间 = (goodId, badId]，已判 good 的提交被排除
+      const suspicious = linearPath.filter(
+        (id) => id !== goodId && !newLog.some((l) => l.commitId === id && l.verdict === 'good')
+      );
+
+      // 判定结果处理：
+      // bad  → 可疑区间收窄为 judging 及其之前的提交（judging 一定坏，它之后可能有更早的坏点）
+      // good → suspicious 里去掉 judging 本身
+      const candidates =
+        sub === 'bad'
+          ? suspicious.filter((id) => {
+              // 只保留 judging 及其祖先（在 suspicious 里位于 judging 之后出现的）
+              const jIndex = linearPath.indexOf(judging);
+              const idIndex = linearPath.indexOf(id);
+              return idIndex >= jIndex;
+            })
+          : suspicious.filter((id) => id !== judging);
+
+      if (candidates.length <= 1) {
+        const found = candidates[0];
+        if (!found) {
+          return invalid(state, '判定结果矛盾：请检查 good/bad 边界是否正确。');
+        }
+        next.bisect = { ...bisect, log: newLog, currentId: null, foundId: found };
+        return success(
+          next,
+          [
+            `${found.slice(0, 7)}（${state.commits.get(found)?.message ?? ''}）是第一个坏提交！`,
+            `（判定了 ${newLog.length} 次）`,
+            '执行 git bisect reset 返回原分支。',
+          ].join('\n')
+        );
+      }
+
+      // 取剩余待测点的中间点
+      const mid = candidates[Math.floor(candidates.length / 2)];
+      next.bisect = { ...bisect, log: newLog, currentId: mid };
+      return success(
+        next,
+        [
+          `已检出中间提交 ${mid.slice(0, 7)}（${state.commits.get(mid)?.message ?? ''}）`,
+          `剩余待测约 ${candidates.length - 1} 个提交。`,
+          '测试后: git bisect good 或 git bisect bad。',
+        ].join('\n')
+      );
+    }
+
+    // git bisect good（对 currentId 的好判定，支持省略 ref）
+    if (parts[1] === 'bisect' && parts[2] === undefined) {
+      return invalid(state, '支持: git bisect start / good <ref> / bad / reset');
+    }
+
+    // git bisect reset
+    if (sub === 'reset') {
+      if (!state.bisect) {
+        return invalid(state, '当前不在二分查找模式。');
+      }
+      const next = cloneState(state);
+      next.bisect = null;
+      return success(next, '已退出二分查找模式，回到原分支。');
+    }
+
+    return invalid(
+      state,
+      '支持: git bisect start / git bisect good <ref> / git bisect bad / git bisect reset'
     );
   }
 

@@ -1468,6 +1468,66 @@ export const practiceTasks: PracticeTask[] = [
     referenceCommands: ['git config --global rerere.enabled true'],
   },
   {
+    id: 'bisect-hunt',
+    mode: 'interactive',
+    title: '用二分法定位问题提交',
+    description: '某个版本突然坏了，用 bisect 缩圈找出第一个引入 bug 的提交。',
+    difficulty: '高级',
+    topic: '扩展概念',
+    prerequisiteIds: ['view-reflog'],
+    estimatedMinutes: 12,
+    nextTaskId: null,
+    successMessage: '🎉 你刚体验了 Git 侦探工作：7 步以内从上百个提交里锁定罪魁祸首。',
+    contextNote:
+      '用户报告搜索功能坏了（提交 c4），但上一个发布版 v1（0000002）是好的。用 bisect 缩圈定位。',
+    terminalIntro: '任务：start → 确定好边界 → 判定坏点 → 锁定元凶 → reset 退出。',
+    createInitialState: () => {
+      let state = createInitialState({ staging: true });
+      state = executeCommand(state, 'git commit -m "feat: search v1"').state;
+      state = { ...state, staging: true };
+      state = executeCommand(state, 'git commit -m "refactor: search module"').state;
+      state = { ...state, staging: true };
+      state = executeCommand(state, 'git commit -m "feat: search filters"').state;
+      state = { ...state, staging: true };
+      state = executeCommand(state, 'git commit -m "feat: search highlight"').state;
+      return state;
+    },
+    steps: [
+      {
+        instruction: '进入二分查找模式（当前 HEAD 会自动标记为坏点）。',
+        acceptedCommands: ['git bisect start'],
+        hint: '使用 git bisect start。',
+        validate: ({ nextState }) => nextState.bisect !== null,
+      },
+      {
+        instruction: '标记已知正常的提交 0000002 为好边界。',
+        acceptedCommands: ['git bisect good 0000002'],
+        hint: '使用 git bisect good 0000002。',
+        validate: ({ nextState }) => nextState.bisect?.goodId === '0000002',
+      },
+      {
+        instruction:
+          'Git 检出了中间提交。测试后确认这个版本就有问题，判定为坏。',
+        acceptedCommands: ['git bisect bad'],
+        hint: '使用 git bisect bad。',
+        validate: ({ nextState, previousState }) =>
+          nextState.bisect?.log.length === (previousState.bisect?.log.length ?? 0) + 1,
+      },
+      {
+        instruction: '继续判定直到锁定第一个坏提交。',
+        acceptedCommands: ['git bisect bad'],
+        hint: '再执行一次 git bisect bad（这个场景里剩下的点都是坏的）。',
+        validate: ({ nextState }) => nextState.bisect?.foundId != null,
+      },
+      {
+        instruction: '确认锁定结果后，退出二分模式回到原分支。',
+        acceptedCommands: ['git bisect reset'],
+        hint: '使用 git bisect reset。',
+        validate: ({ nextState }) => nextState.bisect === null,
+      },
+    ],
+  },
+  {
     id: 'bisect-intro',
     mode: 'conceptual',
     title: '用二分法定位问题提交',
@@ -1553,17 +1613,17 @@ export const practiceSections: PracticeSection[] = [
   {
     id: 'concept-advanced',
     title: '延伸概念',
-    description: 'worktree 和交互式变基已可动手；submodule/rerere 等仍是概念题。',
+    description: 'worktree、交互式变基和 bisect 已可动手；submodule/rerere 仍是概念题。',
     kind: 'concept',
     taskIds: [
+      'rebase-i-cleanup',
+      'bisect-hunt',
       'add-worktree',
       'list-worktree',
-      'rebase-i-cleanup',
       'add-submodule',
       'init-submodules',
       'rebase-exec',
       'enable-rerere',
-      'bisect-intro',
     ],
   },
 ];
