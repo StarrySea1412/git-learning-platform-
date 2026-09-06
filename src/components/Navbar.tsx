@@ -10,6 +10,7 @@ const navLinks = [
   { href: '/tutorials', label: '教程' },
   { href: '/practice', label: '实战练习' },
   { href: '/animations', label: '动画演示' },
+  { href: '/stats', label: '学习统计' },
 ];
 
 function resolveTheme(): boolean {

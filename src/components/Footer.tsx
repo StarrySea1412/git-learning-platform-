@@ -20,13 +20,15 @@ export default function Footer() {
               <li><Link href="/tutorials" className="text-gray-600 dark:text-gray-400 hover:text-primary-500">教程</Link></li>
               <li><Link href="/practice" className="text-gray-600 dark:text-gray-400 hover:text-primary-500">实战练习</Link></li>
               <li><Link href="/animations" className="text-gray-600 dark:text-gray-400 hover:text-primary-500">动画演示</Link></li>
+              <li><Link href="/stats" className="text-gray-600 dark:text-gray-400 hover:text-primary-500">学习统计</Link></li>
             </ul>
           </div>
-          
+
           <div>
             <h4 className="font-semibold text-gray-900 dark:text-white mb-4">社区</h4>
             <ul className="space-y-2">
-              <li><a href="https://github.com" target="_blank" rel="noopener noreferrer" className="text-gray-600 dark:text-gray-400 hover:text-primary-500">GitHub</a></li>
+              <li><a href="https://github.com/StarrySea1412/git-learning-platform-" target="_blank" rel="noopener noreferrer" className="text-gray-600 dark:text-gray-400 hover:text-primary-500">GitHub</a></li>
+              <li><a href="https://gitee.com/starry-sea-1412/git-learning-platform" target="_blank" rel="noopener noreferrer" className="text-gray-600 dark:text-gray-400 hover:text-primary-500">Gitee</a></li>
             </ul>
           </div>
         </div>
