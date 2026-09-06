@@ -10,6 +10,7 @@ import {
   getWeakestTopic,
 } from '@/lib/practice';
 import { achievements } from '@/lib/achievements';
+import ShareCard from '@/components/ShareCard';
 
 const TOPIC_ORDER = [
   '基础命令',
@@ -256,6 +257,11 @@ export default function StatsPage() {
               );
             })}
           </div>
+        </div>
+
+        {/* 分享成绩卡 */}
+        <div className="mt-8">
+          <ShareCard />
         </div>
       </div>
     </div>
