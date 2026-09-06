@@ -26,6 +26,18 @@ export interface MergeConflict {
   sourceBranch: string;
 }
 
+export interface WorktreeEntry {
+  path: string;
+  branch: string | null; // null 表示 detached HEAD
+  head: string;
+}
+
+export interface RebaseTodoItem {
+  action: 'pick' | 'fixup' | 'squash' | 'drop';
+  commitId: string;
+  message: string;
+}
+
 export interface GitState {
   commits: Map<string, GitCommit>;
   branches: Map<string, string>;
@@ -42,6 +54,8 @@ export interface GitState {
   remoteTracking: Map<string, string>; // "origin/<branch>" -> 本地图中的提交 id
   upstream: Map<string, string>; // "<branch>" -> "origin/<branch>"
   tags: Map<string, string>; // tag 名 -> 提交 id
+  worktrees: WorktreeEntry[]; // 关联的工作树（主工作树之外的）
+  rebaseTodo: RebaseTodoItem[] | null; // 交互式变基的待办清单（编辑中）
   mergeConflict: MergeConflict | null; // 冲突进行中（等待 resolve-conflict）
 }
 
