@@ -75,6 +75,9 @@ export interface GitState {
   rebaseTodo: RebaseTodoItem[] | null; // 交互式变基的待办清单（编辑中）
   bisect: BisectState | null; // 二分查找进行中
   submodules: SubmoduleEntry[]; // 子模块（教学模拟）
+  rerereEnabled: boolean; // 冲突自动解决开关
+  rerereCache: string[]; // 已记录的冲突键（ours|theirs）
+  rerereResolved: Map<string, string>; // 冲突键 -> 解决后的值
   mergeConflict: MergeConflict | null; // 冲突进行中（等待 resolve-conflict）
 }
 
@@ -175,6 +178,9 @@ export function cloneState(state: GitState): GitState {
     rebaseTodo: state.rebaseTodo ? state.rebaseTodo.map((t) => ({ ...t })) : null,
     bisect: state.bisect ? { ...state.bisect, log: [...state.bisect.log] } : null,
     submodules: state.submodules.map((m) => ({ ...m })),
+    rerereEnabled: state.rerereEnabled,
+    rerereCache: [...state.rerereCache],
+    rerereResolved: new Map(state.rerereResolved),
     mergeConflict: state.mergeConflict ? { ...state.mergeConflict } : null,
   };
 }
@@ -213,6 +219,9 @@ export function createInitialState(
     rebaseTodo: null,
     bisect: null,
     submodules: [],
+    rerereEnabled: false,
+    rerereCache: [],
+    rerereResolved: new Map(),
     mergeConflict: null,
   };
 }
@@ -1030,6 +1039,16 @@ export function executeCommand(state: GitState, input: string): ExecResult {
       next.mergeConflict = null;
       next.workingTreeDirty = false;
 
+      // rerere：开启时记录本次冲突的解决方案，下次同冲突自动套用
+      if (state.rerereEnabled) {
+        const key = `${conflict.ours}|${conflict.theirs}`;
+        if (!next.rerereCache.includes(key)) {
+          next.rerereCache = [...next.rerereCache, key];
+        }
+        next.rerereResolved = new Map(next.rerereResolved);
+        next.rerereResolved.set(key, resolvedValue);
+      }
+
       const withReflog = appendReflog(
         next,
         `merge ${conflict.sourceBranch}`,
@@ -1797,6 +1816,40 @@ export function executeCommand(state: GitState, input: string): ExecResult {
       const conflicted = cloneState(state);
       conflicted.mergeConflict = conflict;
       conflicted.workingTreeDirty = true;
+
+      // rerere：命中已记录的解决方案时自动解决
+      const conflictKey = `${oursConfig}|${theirsConfig}`;
+      if (state.rerereEnabled && state.rerereCache.includes(conflictKey)) {
+        const resolvedValue = state.rerereResolved.get(conflictKey) ?? oursConfig;
+        const choice =
+          resolvedValue === oursConfig
+            ? 'ours'
+            : resolvedValue === theirsConfig
+              ? 'theirs'
+              : 'both';
+
+        const id = shortId();
+        conflicted.commits.set(id, {
+          id,
+          message: `Merge branch '${sourceBranch}' (resolved: ${choice})`,
+          parents: [headId, sourceCommit],
+          configValue: resolvedValue,
+        });
+        conflicted.branches.set(currentBranch, id);
+        conflicted.HEAD = `ref: ${currentBranch}`;
+        conflicted.mergeConflict = null;
+        conflicted.workingTreeDirty = false;
+        return invalid(
+          conflicted,
+          [
+            `Auto-merging config.js`,
+            `CONFLICT (content): Merge conflict in config.js`,
+            `✓ rerere 已自动套用上次记录的解决方案 (${choice})`,
+            "Merge made by the 'ort' strategy.",
+          ].join('\n')
+        );
+      }
+
       return invalid(
         conflicted,
         [
@@ -2208,16 +2261,39 @@ export function executeCommand(state: GitState, input: string): ExecResult {
     );
   }
 
-  // git rebase -i <range>：生成待办清单，等待 rebase-todo 应用
+  // git rebase -i <range> [--exec "<cmd>"]：生成待办清单，等待 rebase-todo 应用
   if (parts[1] === 'rebase' && parts[2] === '-i' && parts.length >= 4) {
     const range = parts[3];
-    if (command.includes('--exec')) {
-      return unsupported(state, getUnsupportedMessage(command));
-    }
 
     const rangeMatch = range.match(/^HEAD~(\d+)$/);
     if (!rangeMatch) {
       return invalid(state, '沙盒支持 git rebase -i HEAD~<n> 形式的范围。');
+    }
+
+    // --exec "<命令>"：在每个重放提交后自动执行检查命令
+    const execMatch = command.match(/--exec ["']([^"']+)["']/);
+    if (execMatch) {
+      const count0 = Number(rangeMatch[1]);
+      const headId0 = getHeadCommit(state);
+      if (!headId0) {
+        return invalid(state, '当前 HEAD 无法解析到任何提交。');
+      }
+
+      // 模拟：每个提交重放后跑一次命令（沙盒假设全部通过）
+      const lines: string[] = [
+        `Execute: ${execMatch[1]}`,
+      ];
+      let cursor0: string | null = headId0;
+      let executed = 0;
+      for (let i = 0; i < count0 && cursor0; i++) {
+        const commit = state.commits.get(cursor0);
+        if (!commit || commit.parents.length !== 1) break;
+        executed += 1;
+        lines.push(`✓ ${commit.id.slice(0, 7)} ${commit.message} — ${execMatch[1]} 通过`);
+        cursor0 = commit.parents[0];
+      }
+      lines.push('', `变基完成：${executed} 个提交重放，每个提交后执行了 ${execMatch[1]}，全部通过。`);
+      return success(state, lines.join('\n'));
     }
 
     const count = Number(rangeMatch[1]);
@@ -2636,15 +2712,52 @@ export function executeCommand(state: GitState, input: string): ExecResult {
     );
   }
 
-  const unsupportedFamilies = new Set([
-    'config',
-  ]);
+  // git config：支持 rerere.enabled 开关和 user.name/email 等教学常用配置
+  if (parts[1] === 'config') {
+    const rest = parts.slice(2);
+    const isGet =
+      rest.length === 1 ||
+      (rest.length === 2 && (rest[0] === '--get' || rest[0] === '--global --get'));
 
-  if (
-    unsupportedFamilies.has(parts[1]) ||
-    (parts[1] === 'rebase' && command.includes('--exec')) ||
-    (parts[1] === 'config' && command.includes('rerere.enabled'))
-  ) {
+    if (isGet) {
+      const key = rest[rest.length - 1];
+      if (key === 'rerere.enabled') {
+        return success(state, String(state.rerereEnabled));
+      }
+      if (key === 'user.name') {
+        return success(state, 'Your Name');
+      }
+      if (key === 'user.email') {
+        return success(state, 'your.email@example.com');
+      }
+      return success(state, `（未设置 ${key}）`);
+    }
+
+    const keyIdx = rest.findIndex((token) => token.includes('.'));
+    const value = rest[keyIdx + 1];
+    if (keyIdx === -1 || value === undefined) {
+      return invalid(state, '请使用 git config <key> <value> 设置，或 git config <key> 查看。');
+    }
+
+    const key = rest[keyIdx];
+    if (key === 'rerere.enabled' && (value === 'true' || value === 'false')) {
+      const next = cloneState(state);
+      next.rerereEnabled = value === 'true';
+      return success(
+        next,
+        next.rerereEnabled
+          ? '✓ rerere 已开启：此后每次解决冲突，Git 会记录解决方案，遇到相同冲突自动套用。'
+          : 'rerere 已关闭。'
+      );
+    }
+
+    // 其余配置（user.name 等）不改变仓库状态，直接确认
+    return success(state, `${key} 已设置为 ${value}`);
+  }
+
+  const unsupportedFamilies = new Set<string>([]);
+
+  if (unsupportedFamilies.has(parts[1]) || (parts[1] === 'rebase' && command.includes('--exec'))) {
     return unsupported(state, getUnsupportedMessage(command));
   }
 

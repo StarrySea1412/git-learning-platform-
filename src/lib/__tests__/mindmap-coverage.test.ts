@@ -17,7 +17,8 @@ describe('思维导图命令覆盖', () => {
     // 新仓库已在 main 上，switch 到 main 是合法操作（已在分支上）
     ['git switch main', 'ok'],
     ['git init /path/to/project', 'ok'],
-    ['git config --global user.name x', 'unsupported'],
+    // config 现已支持（rerere.enabled 开关与基础键读写）
+    ['git config --global user.name x', 'ok'],
     // clone 现已支持：会真正建立远程跟踪
     ['git clone https://github.com/user/repo.git', 'ok'],
   ] as const)('%s', (command, expected) => {

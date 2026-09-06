@@ -1578,43 +1578,103 @@ export const practiceTasks: PracticeTask[] = [
   },
   {
     id: 'rebase-exec',
-    mode: 'conceptual',
-    title: 'Rebase --exec',
-    description: '理解如何在每个重放提交后自动执行检查命令。',
+    mode: 'interactive',
+    title: 'Rebase --exec：每个提交跑一遍测试',
+    description: '把检查命令嵌进变基过程，确保历史里每个提交都能独立通过测试。',
     difficulty: '高级',
     topic: '扩展概念',
     prerequisiteIds: ['list-worktree'],
-    estimatedMinutes: 6,
+    estimatedMinutes: 8,
     nextTaskId: 'enable-rerere',
-    successMessage: '你已经理解了 --exec 在 rebase 中的用途。',
-    conceptNote:
-      '这是概念练习，本轮不提供图形模拟，也不会计入完成进度。',
-    instructions: ['理解 --exec 可以把测试或检查命令嵌入 rebase 过程。'],
-    hints: [
-      '这个技巧很适合确保每个提交都能单独通过测试。',
-      '它通常与交互式 rebase 一起使用。',
+    successMessage: '🎉 --exec 的价值在于"历史级测试"：不是整体能跑就行，而是每个提交都健康——回滚到任何位置都安全。',
+    contextNote:
+      '你刚整理完三个提交，现在想在变基时给每个提交都跑一遍测试，确保历史里没有"半成品提交"。',
+    terminalIntro: '任务：用 --exec 在每个提交后执行 npm test。',
+    createInitialState: () => {
+      let state = createInitialState({ staging: true });
+      state = executeCommand(state, 'git commit -m "feat: setup"').state;
+      state = { ...state, staging: true };
+      state = executeCommand(state, 'git commit -m "feat: core logic"').state;
+      state = { ...state, staging: true };
+      state = executeCommand(state, 'git commit -m "feat: polish"').state;
+      return state;
+    },
+    steps: [
+      {
+        instruction: '对最近 3 个提交做变基，并在每个提交后执行 "npm test"。',
+        acceptedCommands: ['git rebase -i --exec "npm test" HEAD~3'],
+        hint: '使用 git rebase -i --exec "npm test" HEAD~3（注意 --exec 的命令要带引号）。',
+        teachNote:
+          '--exec "<命令>" 让 Git 在每个重放完的提交后执行一次该命令——任何一步失败，变基立刻停下来等你修复。这把"整条分支能跑"升级成了"每个提交都能跑"，是可回滚历史的保障。',
+        validate: ({ result }) =>
+          result.ok &&
+          result.output.includes('npm test') &&
+          result.output.split('\n').filter((l) => l.includes('通过')).length >= 3,
+      },
+      {
+        instruction: '用 git log --oneline 确认历史完好。',
+        acceptedCommands: ['git log --oneline'],
+        hint: '使用 git log --oneline。',
+        validate: ({ result }) =>
+          result.ok && result.output.includes('feat: polish'),
+      },
     ],
-    referenceCommands: ['git rebase -i --exec "npm test" HEAD~3'],
   },
   {
     id: 'enable-rerere',
-    mode: 'conceptual',
-    title: '启用 Rerere',
-    description: '理解如何让 Git 记住冲突解决方案。',
+    mode: 'interactive',
+    title: '启用 Rerere：让 Git 记住你怎么解冲突',
+    description: '开启 rerere 后，解决过的冲突下次自动套用——频繁变基团队的救星。',
     difficulty: '高级',
     topic: '扩展概念',
     prerequisiteIds: ['rebase-exec'],
-    estimatedMinutes: 5,
+    estimatedMinutes: 10,
     nextTaskId: null,
-    successMessage: '你已经理解了 rerere 的使用场景。',
-    conceptNote:
-      '这是概念练习，本轮不提供图形模拟，也不会计入完成进度。',
-    instructions: ['了解 rerere 会记录你处理冲突的方式，并在下次尝试自动复用。'],
-    hints: [
-      '它对频繁 rebase 或长期维护分支的团队很有帮助。',
-      '通常用 git config 开启。',
+    successMessage: '🎉 你刚体验了 rerere 的完整闭环：开开关 → 手动解一次 → 下次同冲突自动解决。频繁 rebase 的团队靠它省下大量重复劳动。',
+    contextNote:
+      '你的团队长期维护多条分支，同样的冲突反复出现。开启 rerere，让 Git 记住你的解法。',
+    terminalIntro: '任务：开启 rerere → 经历一次冲突并解决 → 再次遇到同冲突看它自动套用。',
+    createInitialState: () => {
+      let state = createInitialState({ configValue: 'log_level=info' });
+      state = executeCommand(state, 'git branch feature').state;
+      state = { ...state, staging: true };
+      state = executeCommand(state, 'git commit -m "main: set" config="log_level=debug"').state;
+      state = executeCommand(state, 'git checkout feature').state;
+      state = { ...state, staging: true };
+      state = executeCommand(state, 'git commit -m "feat: set" config="log_level=trace"').state;
+      return executeCommand(state, 'git checkout main').state;
+    },
+    steps: [
+      {
+        instruction: '开启 rerere。',
+        acceptedCommands: ['git config rerere.enabled true', 'git config --global rerere.enabled true'],
+        hint: '使用 git config rerere.enabled true。',
+        teachNote:
+          'rerere = reuse recorded resolution。开启后每次解决冲突，Git 都会把"这组冲突 → 你的解法"记进本地缓存；下次遇到一模一样的冲突块，自动套用不再打扰你。',
+        validate: ({ nextState }) => nextState.rerereEnabled === true,
+      },
+      {
+        instruction: '合并 feature，第一次冲突需要你手动解决。',
+        acceptedCommands: ['git merge feature'],
+        hint: '执行 git merge feature，注意这次还是会冲突。',
+        validate: ({ nextState }) => nextState.mergeConflict !== null,
+      },
+      {
+        instruction: '用 theirs 方案解决（保留 feature 的 trace 设置）。',
+        acceptedCommands: ['resolve-conflict theirs'],
+        hint: '执行 resolve-conflict theirs。',
+        validate: ({ nextState, result }) =>
+          result.ok && nextState.rerereCache.length === 1,
+      },
+      {
+        instruction:
+          '重置场景后再合并一次同样冲突的分支（help 提示怎么做），验证 rerere 自动套用。',
+        acceptedCommands: ['git merge feature'],
+        hint: '直接再次执行 git merge feature——沙盒会构造同样的冲突，观察 rerere 的自动套用提示。',
+        validate: ({ result }) =>
+          result.output.includes('rerere 已自动套用'),
+      },
     ],
-    referenceCommands: ['git config --global rerere.enabled true'],
   },
   {
     id: 'bisect-hunt',
