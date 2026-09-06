@@ -307,6 +307,8 @@ export const practiceTasks: PracticeTask[] = [
         instruction: '初始化一个新的 Git 仓库。',
         acceptedCommands: ['git init'],
         hint: '直接使用 git init 即可。',
+        teachNote:
+          'git init 做的事很克制：只是创建 .git 文件夹开始记录，不动你的任何文件。执行后当前目录就是"仓库"，所有历史都藏在那个隐藏文件夹里。',
         validate: ({ nextState, result }) =>
           result.ok &&
           nextState.commits.size === 1 &&
@@ -334,6 +336,8 @@ export const practiceTasks: PracticeTask[] = [
         instruction: '查看当前仓库状态。',
         acceptedCommands: ['git status'],
         hint: '使用 git status。',
+        teachNote:
+          'status 是 Git 里唯一"只读不动手"的常用命令——随便敲，永远不会破坏任何东西。输出分三段：暂存区的、未暂存的、未跟踪的，读它的顺序就是下一步操作的顺序。',
         validate: ({ result }) =>
           result.output.includes('位于分支') &&
           result.output.includes('尚未暂存的更改'),
@@ -359,6 +363,8 @@ export const practiceTasks: PracticeTask[] = [
         instruction: '将当前工作区修改加入暂存区。',
         acceptedCommands: ['git add .', 'git add --all', 'git add -A'],
         hint: '使用 git add .、git add -A 或 git add --all 都可以。',
+        teachNote:
+          'git add . 表示"把当前目录下所有改动放进下次提交的清单"。暂存区是 Git 特有的设计：让你把相关改动组织成一个干净的提交，而不是把鸡毛蒜皮混在一起。',
         validate: ({ previousState, nextState }) =>
           previousState.workingTreeDirty &&
           nextState.staging &&
@@ -388,6 +394,8 @@ export const practiceTasks: PracticeTask[] = [
           "git commit -m 'initial commit'",
         ],
         hint: '使用 git commit -m "initial commit"。',
+        teachNote:
+          '提交信息写给三个月后的自己。-m 后的引号里是这次提交的说明；注意提交的是"暂存区的内容"，所以 add 了什么决定了什么进历史。',
         validate: ({ previousState, nextState }) =>
           nextState.commits.size === previousState.commits.size + 1 &&
           getHeadMessage(nextState) === 'initial commit' &&
@@ -415,6 +423,8 @@ export const practiceTasks: PracticeTask[] = [
         instruction: '使用单行格式查看提交历史。',
         acceptedCommands: ['git log --oneline'],
         hint: '使用 git log --oneline。',
+        teachNote:
+          '--oneline 把每个提交压缩成一行（短哈希+信息）。完整版 git log 一屏只能看几个提交，日常浏览历史几乎都用单行模式。',
         validate: ({ result }) =>
           result.output.includes('prepare log view') &&
           result.output.split('\n').length >= 2,
@@ -441,6 +451,8 @@ export const practiceTasks: PracticeTask[] = [
         instruction: '克隆远程仓库 https://github.com/team/project.git。',
         acceptedCommands: ['git clone https://github.com/team/project.git'],
         hint: '使用 git clone <远程地址>。',
+        teachNote:
+          'clone = 把远程仓库完整复制到本地：不只是文件，还有全部历史，并自动把远程命名为 origin。和 git init 的区别：init 从零开始，clone 接手现成的项目。',
         validate: ({ nextState }) =>
           nextState.remote?.url === 'https://github.com/team/project.git' &&
           nextState.branches.has('main') &&
@@ -450,6 +462,8 @@ export const practiceTasks: PracticeTask[] = [
         instruction: '查看远程仓库配置，确认 origin 已经自动设置。',
         acceptedCommands: ['git remote -v'],
         hint: '使用 git remote -v 查看远程地址。',
+        teachNote:
+          'origin 不是关键字，只是 clone 时 Git 给远程仓库起的默认名。-v 会列出读(fetch)和写(push)两个地址——通常相同。',
         validate: ({ result }) =>
           result.ok &&
           result.output.includes('origin') &&
@@ -459,6 +473,8 @@ export const practiceTasks: PracticeTask[] = [
         instruction: '查看所有分支（含远程分支），确认 origin/main 存在。',
         acceptedCommands: ['git branch -a'],
         hint: '使用 git branch -a。',
+        teachNote:
+          '-a 显示包括远程分支镜像在内的所有分支。remotes/origin/main 这样的条目是"远程分支在你本地的镜像"，只在 fetch 时更新——看它就知道远程上次同步时的样子。',
         validate: ({ result }) =>
           result.ok &&
           result.output.includes('* main') &&
@@ -495,6 +511,8 @@ export const practiceTasks: PracticeTask[] = [
         instruction: '切换到 feature 分支。',
         acceptedCommands: ['git checkout feature'],
         hint: '然后使用 git checkout feature 切换过去。',
+        teachNote:
+          'checkout 切换分支时，工作区文件会变成目标分支的快照。切走前最好保持工作区干净——带着未提交的修改切换，要么改动跟着你走，要么被 Git 拒绝。',
         validate: ({ nextState }) => getHeadBranch(nextState) === 'feature',
       },
     ],
@@ -526,6 +544,8 @@ export const practiceTasks: PracticeTask[] = [
         instruction: '确认当前位于 main 分支。',
         acceptedCommands: ['git checkout main'],
         hint: '先切回 main，再执行 merge。',
+        teachNote:
+          '合并前先站到目标分支上。很多人在这里栽跟头：以为 merge 会"把我的分支推给对方"，实际语义是"把对方合进我这里"——方向反了结果就反了。',
         validate: ({ nextState }) => getHeadBranch(nextState) === 'main',
       },
       {
@@ -587,6 +607,8 @@ export const practiceTasks: PracticeTask[] = [
         instruction: '尝试把 feature 合并进 main，观察冲突提示。',
         acceptedCommands: ['git merge feature'],
         hint: '直接执行 git merge feature，注意 CONFLICT 字样。',
+        teachNote:
+          '冲突不是失败，是 Git 在说"两边都改了同一处，我不能替你决定"。注意 Automatic merge failed——此时仓库处于合并中间态，解决之前无法提交其他内容。',
         validate: ({ nextState }) => nextState.mergeConflict !== null,
       },
       {
@@ -605,6 +627,8 @@ export const practiceTasks: PracticeTask[] = [
           'main 上的 debug 级别是测试环境验证过的，保留当前分支的版本（ours）。',
         acceptedCommands: ['resolve-conflict ours'],
         hint: '使用 resolve-conflict ours 保留 HEAD 一侧。',
+        teachNote:
+          'ours/theirs 的参照系是"执行 merge 时你站在哪边"：ours = 合并前你所在分支（main），theirs = 被合进来的分支（feature）。命名是站在 merge 发起者视角的。',
         validate: ({ nextState, result }) => {
           const headId = getHeadCommit(nextState);
           const head = headId ? nextState.commits.get(headId) : null;
@@ -660,6 +684,8 @@ export const practiceTasks: PracticeTask[] = [
           "git commit --allow-empty -m 'add login form'",
         ],
         hint: '沙盒允许空提交：git commit --allow-empty -m "add login form"。',
+        teachNote:
+          '真实开发很少用空提交，沙盒用它模拟"这次提交代表的改动"。--allow-empty 的合法用途是标记部署节点或触发 CI，平时提交前记得先 add。',
         validate: ({ nextState }) => getHeadMessage(nextState) === 'add login form',
       },
       {
@@ -706,6 +732,8 @@ export const practiceTasks: PracticeTask[] = [
         instruction: '从远程获取最新状态（只下载，不合并）。',
         acceptedCommands: ['git fetch', 'git fetch origin'],
         hint: '使用 git fetch 或 git fetch origin。',
+        teachNote:
+          'fetch 只下载远程的新对象并更新 origin/* 镜像，不碰你的工作区和本地分支——这是它和 pull 的本质区别。先 fetch 后看，是"先侦察后行动"的安全习惯。',
         validate: ({ previousState, nextState }) =>
           nextState.remoteTracking.get('origin/main') !==
           previousState.remoteTracking.get('origin/main'),
@@ -714,6 +742,8 @@ export const practiceTasks: PracticeTask[] = [
         instruction: '队友又推了新提交！再次 fetch，看看远程最新状态。',
         acceptedCommands: ['git fetch', 'git fetch origin'],
         hint: '队友推送不会自动同步到你本地，再执行一次 git fetch。',
+        teachNote:
+          '对，远程变了不会主动通知你——Git 是分布式系统，一切同步都由你主动发起。这也是"push 前先 fetch"成为铁律的原因。',
         validate: ({ previousState, nextState }) =>
           nextState.remoteTracking.get('origin/main') !==
           previousState.remoteTracking.get('origin/main'),
@@ -722,6 +752,8 @@ export const practiceTasks: PracticeTask[] = [
         instruction: '把 origin/main 合并进当前分支，让本地 main 快进到远程最新位置。',
         acceptedCommands: ['git merge origin/main', 'git pull origin main'],
         hint: '使用 git merge origin/main，或用 git pull origin main 一步完成。',
+        teachNote:
+          'origin/main 是远程 main 在你本地的镜像分支。merge 它 = 把远程的工作合进本地。pull 就是 fetch+merge 的合写，但拆开做你能先看清远程改了什么再决定。',
         validate: ({ previousState, nextState }) => {
           const trackingId = nextState.remoteTracking.get('origin/main');
           const mainHead = nextState.branches.get('main');
@@ -769,6 +801,8 @@ export const practiceTasks: PracticeTask[] = [
         instruction: '把远程的提交拉取下来，与本地 main 合并。',
         acceptedCommands: ['git pull origin main'],
         hint: '使用 git pull origin main，Git 会生成一个合并提交。',
+        teachNote:
+          '拉下来的远程提交和你的本地提交分叉了，Git 自动生成一个有两个父提交的合并提交把两条线缝合。缝合后远程的所有工作都在你本地，重新推送就能通过。',
         validate: ({ previousState, nextState }) => {
           const nextHeadId = getHeadCommit(nextState);
           const nextHead = nextHeadId ? nextState.commits.get(nextHeadId) : null;
@@ -786,6 +820,8 @@ export const practiceTasks: PracticeTask[] = [
         instruction: '重新推送 main，这一次应该成功。',
         acceptedCommands: ['git push origin main'],
         hint: '再次执行 git push origin main。',
+        teachNote:
+          '这次成功是因为远程的所有提交已经包含在你的历史里——推送变成了快进（fast-forward），Git 确认不会覆盖任何人的工作，自然放行。',
         validate: ({ nextState }) =>
           getHeadBranch(nextState) === 'main' &&
           nextState.remote?.branches.get('main') === getHeadCommit(nextState),
@@ -819,6 +855,8 @@ export const practiceTasks: PracticeTask[] = [
         instruction: '把哈希为 0000003 的修复提交摘到当前分支。',
         acceptedCommands: ['git cherry-pick 0000003'],
         hint: '使用 git cherry-pick <提交哈希>。',
+        teachNote:
+          'cherry-pick 是"复制提交"：把指定提交的改动在当前分支重新应用，生成内容相同但哈希不同的新提交。哈希变了是因为父提交变了——这是判断"搬过没有"的依据。',
         validate: ({ previousState, nextState }) => {
           const nextHeadId = getHeadCommit(nextState);
           const nextHead = nextHeadId ? nextState.commits.get(nextHeadId) : null;
@@ -861,6 +899,8 @@ export const practiceTasks: PracticeTask[] = [
         instruction: '删除已合并的 feature 分支。',
         acceptedCommands: ['git branch -d feature'],
         hint: '使用 git branch -d feature。',
+        teachNote:
+          '-d 会检查分支是否已合并，未合并就拒绝——这是安全锁。真要丢弃未合并的工作用大写 -D，它不做检查。删除分支只删标签不删提交，误删可以用 reflog 找回。',
         validate: ({ previousState, nextState }) =>
           previousState.branches.has('feature') &&
           !nextState.branches.has('feature') &&
@@ -923,6 +963,8 @@ export const practiceTasks: PracticeTask[] = [
           "git commit -m 'refine login copy'",
         ],
         hint: '直接用 git commit -m "refine login copy"。',
+        teachNote:
+          'reset --soft 之后暂存区还是满的，直接重新 commit 就是"用新信息重新提交了一遍"。这次提交会替代原来那次的位置，历史因此更干净。',
         validate: ({ nextState }) =>
           getHeadMessage(nextState) === 'refine login copy' && !nextState.staging,
       },
@@ -955,12 +997,16 @@ export const practiceTasks: PracticeTask[] = [
         instruction: '切换到 feature 分支。',
         acceptedCommands: ['git checkout feature'],
         hint: '先进入要变基的 feature 分支。',
+        teachNote:
+          'rebase 重放的是"当前分支"的提交，所以必须先站在被整理的分支上。站在 main 上执行 rebase feature，动的就是 main——方向和 merge 一样重要。',
         validate: ({ nextState }) => getHeadBranch(nextState) === 'feature',
       },
       {
         instruction: '把 feature 变基到 main。',
         acceptedCommands: ['git rebase main'],
         hint: '在 feature 分支上执行 git rebase main。',
+        teachNote:
+          'rebase main 读作"把我的提交搬到 main 的最新位置之后"。原提交被复制为新提交（哈希变化），历史变成一条直线。黄金法则：只 rebase 没推送过的私有分支。',
         validate: ({ previousState, nextState }) => {
           const nextHeadId = getHeadCommit(nextState);
           const nextHead = nextHeadId ? nextState.commits.get(nextHeadId) : null;
@@ -1102,6 +1148,8 @@ export const practiceTasks: PracticeTask[] = [
         instruction: '先把当前工作区改动暂存起来。',
         acceptedCommands: ['git stash'],
         hint: '先用 git stash 保存当前修改。',
+        teachNote:
+          'stash 把未提交的改动收进一个临时柜，工作区瞬间变干净——比提交快、不留历史。注意它只收已跟踪文件的改动，新文件要加 -u。',
         validate: ({ previousState, nextState }) =>
           previousState.workingTreeDirty &&
           !nextState.workingTreeDirty &&
@@ -1112,12 +1160,16 @@ export const practiceTasks: PracticeTask[] = [
         instruction: '切回 main，准备处理插队任务。',
         acceptedCommands: ['git checkout main'],
         hint: '现场收好后，切回 main。',
+        teachNote:
+          '工作区已经干净，切换不会再被拒绝或带着脏改动。这就是 stash 的价值：让分支切换回到"随时可走"的状态。',
         validate: ({ nextState }) => getHeadBranch(nextState) === 'main',
       },
       {
         instruction: '插队任务处理完后，回到 feature 分支。',
         acceptedCommands: ['git checkout feature'],
         hint: '处理完临时任务，再切回 feature。',
+        teachNote:
+          'stash 是跟着仓库走的，不是跟着分支——切回来时它还在，等你取。',
         validate: ({ nextState }) =>
           getHeadBranch(nextState) === 'feature' && nextState.stash !== null,
       },
@@ -1125,6 +1177,8 @@ export const practiceTasks: PracticeTask[] = [
         instruction: '恢复刚才收起的现场。',
         acceptedCommands: ['git stash pop'],
         hint: '最后执行 git stash pop。',
+        teachNote:
+          'pop = 恢复改动 + 删除暂存记录。恢复的改动回到工作区，和你收起时一模一样。如果只想取不改、以后还要再取，用 stash apply。',
         validate: ({ nextState }) =>
           nextState.stash === null &&
           nextState.workingTreeDirty &&
@@ -1156,6 +1210,8 @@ export const practiceTasks: PracticeTask[] = [
         instruction: '查看 HEAD 的引用日志。',
         acceptedCommands: ['git reflog'],
         hint: '使用 git reflog。',
+        teachNote:
+          'reflog 记录的是 HEAD 的每一次移动：提交、切换、重置……它是本地操作日志，不推送、不共享。出事后第一反应看它——只要提交出现过，这里就有线索。',
         validate: ({ result }) =>
           result.output.includes('HEAD@{0}') &&
           result.output.includes('checkout'),
@@ -1184,12 +1240,16 @@ export const practiceTasks: PracticeTask[] = [
         instruction: '把当前分支硬重置到上一个提交。',
         acceptedCommands: ['git reset --hard HEAD~1'],
         hint: '第一步使用 git reset --hard HEAD~1。',
+        teachNote:
+          'hard reset 把分支指针往回挪一格，改动一并清掉——看起来提交"消失"了。别慌：它只是不在分支上了，对象还在数据库里，下两步就是找它回来。',
         validate: ({ nextState }) => getHeadMessage(nextState) === 'initial commit',
       },
       {
         instruction: '查看 reflog，确认丢失的提交还在引用日志中。',
         acceptedCommands: ['git reflog'],
         hint: '使用 git reflog，观察 HEAD@{1} 一类的记录。',
+        teachNote:
+          'HEAD@{1} 读作"HEAD 上一次所在的位置"。列表按时间倒序。找到误操作之前的那行，记下它的哈希或序号。',
         validate: ({ result }) =>
           result.output.includes('reset --hard HEAD~1') &&
           result.output.includes('HEAD@{1}'),
@@ -1198,6 +1258,8 @@ export const practiceTasks: PracticeTask[] = [
         instruction: '把 HEAD 重置回 HEAD@{1}，恢复丢失的提交。',
         acceptedCommands: ['git reset --hard HEAD@{1}'],
         hint: '使用 git reset --hard HEAD@{1}。',
+        teachNote:
+          '把分支指回"出事前"的位置——被丢弃的提交就这样回到了分支上。reflog 是纯本地机制，这就是 Git 几乎不丢已提交数据的原因。',
         validate: ({ nextState }) => getHeadMessage(nextState) === 'keep me',
       },
     ],
@@ -1222,6 +1284,8 @@ export const practiceTasks: PracticeTask[] = [
         instruction: '撤销最近一次提交。',
         acceptedCommands: ['git revert HEAD'],
         hint: '使用 git revert HEAD。',
+        teachNote:
+          'revert 不删历史，而是生成一个"反向提交"抵消目标提交的改动。历史变长了而不是被改写——所以对已推送的提交它是唯一安全选择。',
         validate: ({ previousState, nextState }) =>
           nextState.commits.size === previousState.commits.size + 1 &&
           (getHeadMessage(nextState) ?? '').startsWith('Revert "buggy change"'),
@@ -1250,6 +1314,8 @@ export const practiceTasks: PracticeTask[] = [
         instruction: '切换到提交 0000001，进入 detached HEAD。',
         acceptedCommands: ['git checkout 0000001'],
         hint: '使用 git checkout <提交哈希>。',
+        teachNote:
+          '直接检出提交时 HEAD 不挂在任何分支上，这就是 detached HEAD。查看旧代码完全没问题；危险的是此时的新提交不属于任何分支，切走后会悬空。',
         validate: ({ nextState }) =>
           getHeadBranch(nextState) === null &&
           getHeadCommit(nextState) === '0000001',
@@ -1258,6 +1324,8 @@ export const practiceTasks: PracticeTask[] = [
         instruction: '基于当前位置创建 rescue 分支。',
         acceptedCommands: ['git checkout -b rescue'],
         hint: '使用 git checkout -b rescue。',
+        teachNote:
+          '在 detached HEAD 里建分支 = 把"现在这个位置"钉在一个新分支上。悬空的提交从此有了归属，这是救援的标准动作。',
         validate: ({ nextState }) =>
           getHeadBranch(nextState) === 'rescue' &&
           getBranchCommit(nextState, 'rescue') === '0000001',
@@ -1334,6 +1402,8 @@ export const practiceTasks: PracticeTask[] = [
         instruction: '把 hotfix 分支检出到新目录 ../hotfix。',
         acceptedCommands: ['git worktree add ../hotfix hotfix'],
         hint: '使用 git worktree add <路径> <分支>。',
+        teachNote:
+          'worktree 在新目录检出另一个分支，两个目录共享同一份仓库历史。和 clone 不同：它不复制历史，只是"同一仓库的第二个工作区"——省空间、改动互通。',
         validate: ({ nextState }) =>
           nextState.worktrees.length === 1 &&
           nextState.worktrees[0].branch === 'hotfix',
@@ -1342,6 +1412,8 @@ export const practiceTasks: PracticeTask[] = [
         instruction: '查看所有工作树，确认主工作树和新建的都在。',
         acceptedCommands: ['git worktree list'],
         hint: '使用 git worktree list。',
+        teachNote:
+          '列表第一行是主工作树（带 *），后面是挂载的。每个工作树可以待在不同分支上互不干扰。',
         validate: ({ result }) =>
           result.ok &&
           result.output.includes('hotfix') &&
@@ -1381,6 +1453,8 @@ export const practiceTasks: PracticeTask[] = [
         instruction: '删除已用完的 ../hotfix 工作树。',
         acceptedCommands: ['git worktree remove ../hotfix'],
         hint: '使用 git worktree remove <路径>。',
+        teachNote:
+          'remove 只删工作目录和挂载记录，分支和提交都在。清理完的仓库不再有多余的挂载点。',
         validate: ({ nextState }) => nextState.worktrees.length === 0,
       },
     ],
@@ -1413,12 +1487,16 @@ export const practiceTasks: PracticeTask[] = [
         instruction: '对最近 3 个提交发起交互式变基。',
         acceptedCommands: ['git rebase -i HEAD~3'],
         hint: '使用 git rebase -i HEAD~3。',
+        teachNote:
+          '-i = interactive。HEAD~3 表示"最近 3 个提交"。真实 Git 会打开编辑器列出待办清单；沙盒把它模拟成可编辑的 rebase-todo 列表。',
         validate: ({ nextState }) => nextState.rebaseTodo !== null,
       },
       {
         instruction: '把第 2 项（wip）标记为 drop。',
         acceptedCommands: ['rebase-todo drop 2'],
         hint: '使用 rebase-todo drop 2（序号从 1 开始）。',
+        teachNote:
+          'drop = 从历史中删掉这个提交，它做的改动也一起消失。沙盒里用 rebase-todo <动作> <序号> 编辑清单，等价于真实编辑器里把 pick 改成 drop。',
         validate: ({ nextState }) =>
           nextState.rebaseTodo?.[1].action === 'drop',
       },
@@ -1426,6 +1504,8 @@ export const practiceTasks: PracticeTask[] = [
         instruction: '应用清单，完成变基。',
         acceptedCommands: ['rebase-todo apply'],
         hint: '使用 rebase-todo apply。',
+        teachNote:
+          'apply 让 Git 按清单重放历史：保留的提交生成新副本，drop 的消失，fixup/squash 的并入前一项。重放后的历史就是清单的样子。',
         validate: ({ nextState, result }) => {
           const headId = nextState.HEAD.startsWith('ref: ')
             ? nextState.branches.get(nextState.HEAD.slice(5)) ?? null
@@ -1443,6 +1523,8 @@ export const practiceTasks: PracticeTask[] = [
         instruction: '用 git log --oneline 确认历史里不再有 wip。',
         acceptedCommands: ['git log --oneline'],
         hint: '使用 git log --oneline，观察输出里是否还有 wip 字样。',
+        teachNote:
+          '验证是整理历史的最后一步：从 HEAD 往回数，确认每条提交都该在。重放生成了新哈希——原提交还在数据库里，reflog 可找回，这是安全网。',
         validate: ({ result }) =>
           result.ok && !result.output.includes('wip'),
       },
@@ -1518,12 +1600,16 @@ export const practiceTasks: PracticeTask[] = [
         instruction: '进入二分查找模式（当前 HEAD 会自动标记为坏点）。',
         acceptedCommands: ['git bisect start'],
         hint: '使用 git bisect start。',
+        teachNote:
+          'start 进入二分模式并把当前 HEAD 标为已知坏点。此时还没有缩圈——需要一个"确定没问题"的提交作为另一端。',
         validate: ({ nextState }) => nextState.bisect !== null,
       },
       {
         instruction: '标记已知正常的提交 0000002 为好边界。',
         acceptedCommands: ['git bisect good 0000002'],
         hint: '使用 git bisect good 0000002。',
+        teachNote:
+          '好边界确定后，可疑区间就是 (好, 坏] 之间的提交。Git 立刻检出区间中点让你测试——每判定一次，剩余待测减半。',
         validate: ({ nextState }) => nextState.bisect?.goodId === '0000002',
       },
       {
@@ -1531,6 +1617,8 @@ export const practiceTasks: PracticeTask[] = [
           'Git 检出了中间提交。测试后确认这个版本就有问题，判定为坏。',
         acceptedCommands: ['git bisect bad'],
         hint: '使用 git bisect bad。',
+        teachNote:
+          '判定"当前检出的版本也是坏的"意味着：坏点在更早的方向。可疑区间向老的一侧收窄，Git 检出新的中点。',
         validate: ({ nextState, previousState }) =>
           nextState.bisect?.log.length === (previousState.bisect?.log.length ?? 0) + 1,
       },
@@ -1538,12 +1626,16 @@ export const practiceTasks: PracticeTask[] = [
         instruction: '继续判定直到锁定第一个坏提交。',
         acceptedCommands: ['git bisect bad'],
         hint: '再执行一次 git bisect bad（这个场景里剩下的点都是坏的）。',
+        teachNote:
+          '区间只剩一个候选时，Git 直接宣布"这就是第一个坏提交"。100 个提交最多 7 次判定——这就是二分的威力。',
         validate: ({ nextState }) => nextState.bisect?.foundId != null,
       },
       {
         instruction: '确认锁定结果后，退出二分模式回到原分支。',
         acceptedCommands: ['git bisect reset'],
         hint: '使用 git bisect reset。',
+        teachNote:
+          'reset 退出二分模式、回到进入前的分支。忘了 reset 会一直停在历史中间的某个提交上（detached HEAD），这是 bisect 最常见的收尾失误。',
         validate: ({ nextState }) => nextState.bisect === null,
       },
     ],
