@@ -1,0 +1,44 @@
+{
+  "name": "git-simulator-core",
+  "version": "0.1.0",
+  "description": "Zero-dependency in-memory Git simulator: branches, remotes, rebase, stash, conflicts — for teaching tools, sandboxes and visualizations",
+  "keywords": [
+    "git",
+    "simulator",
+    "education",
+    "learning",
+    "sandbox",
+    "in-memory",
+    "visualization"
+  ],
+  "license": "MIT",
+  "author": "StarrySea1412",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/StarrySea1412/git-learning-platform-.git",
+    "directory": "packages/git-simulator"
+  },
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run --root ..",
+    "prepublishOnly": "npm run build"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0"
+  }
+}

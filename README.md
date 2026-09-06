@@ -60,9 +60,22 @@ git-learning-platform/
 │   ├── components/       # React组件
 │   ├── lib/              # 工具函数和数据
 │   └── types/            # TypeScript类型定义
+├── packages/
+│   └── git-simulator/    # 独立 npm 包：零依赖 Git 模拟器核心
 ├── public/               # 静态资源
 └── ...配置文件
 ```
+
+## 📦 git-simulator-core
+
+平台的 Git 模拟器已抽成独立的零依赖 npm 包（源码在 `packages/git-simulator`），
+可直接安装用于自己的教学工具、沙盒或可视化项目：
+
+```bash
+npm install git-simulator-core
+```
+
+详见 [packages/git-simulator/README.md](./packages/git-simulator/README.md)。
 
 ## 🤝 贡献
 
