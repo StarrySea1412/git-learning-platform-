@@ -1,8 +1,9 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import Link from 'next/link';
+import { playFanfareSound } from '@/lib/sound';
 
 interface SectionCelebrationProps {
   /** 章节标题，如"分支协作" */
@@ -52,6 +53,10 @@ export default function SectionCelebration({
   onClose,
 }: SectionCelebrationProps) {
   const confetti = useMemo(() => generateConfetti(28), []);
+
+  useEffect(() => {
+    playFanfareSound();
+  }, []);
 
   const percent = totalAll === 0 ? 0 : Math.round((totalCompleted / totalAll) * 100);
 

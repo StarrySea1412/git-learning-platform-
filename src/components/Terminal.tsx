@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
+import { playKeySound } from '@/lib/sound';
 
 interface TerminalLine {
   id: number;
@@ -207,7 +208,10 @@ export default function Terminal({
             ref={inputRef}
             type="text"
             value={currentInput}
-            onChange={(event) => setCurrentInput(event.target.value)}
+            onChange={(event) => {
+              setCurrentInput(event.target.value);
+              playKeySound();
+            }}
             onKeyDown={handleKeyDown}
             className="flex-1 bg-transparent text-green-400 outline-none caret-green-400"
             autoFocus

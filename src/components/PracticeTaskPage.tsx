@@ -31,6 +31,7 @@ import {
 } from '@/lib/git-simulator';
 import { getTutorialsForPracticeTask } from '@/lib/tutorials';
 import { usePracticeProgress } from '@/lib/usePracticeProgress';
+import { playStepSuccessSound, playStepErrorSound, playFanfareSound } from '@/lib/sound';
 
 interface PracticeTaskPageProps {
   id: string;
@@ -163,15 +164,20 @@ export default function PracticeTaskPage({ id }: PracticeTaskPageProps) {
       if (evaluation.advanced) {
         setCurrentStep(evaluation.nextStepIndex);
         setLastTeaching(null);
-        // 触发"步骤完成"脉冲动画
+        // 触发"步骤完成"脉冲动画与音效
         setStepPulse((value) => value + 1);
+        playStepSuccessSound();
       } else if (evaluation.teaching) {
         setLastTeaching(evaluation.teaching);
+        playStepErrorSound();
+      } else if (!evaluation.completed) {
+        playStepErrorSound();
       }
 
       if (evaluation.completed) {
         setCompleted(true);
         markCompleted(task.id);
+        playFanfareSound();
 
         // 章节通关检测：本任务所在章节是否因这一题全部完成
         if (task) {
