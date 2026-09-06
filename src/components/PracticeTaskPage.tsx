@@ -10,6 +10,7 @@ import Terminal from '@/components/Terminal';
 import {
   evaluateInteractivePracticeCommand,
   getNextPracticeTask,
+  getPrevPracticeTask,
   getPracticeTaskById,
   getPracticeTaskHints,
   getPracticeTaskInstructions,
@@ -46,6 +47,7 @@ export default function PracticeTaskPage({ id }: PracticeTaskPageProps) {
   );
 
   const nextTask = task ? getNextPracticeTask(task) : null;
+  const prevTask = task ? getPrevPracticeTask(task) : null;
   const prerequisites = useMemo(
     () => (task ? getPracticeTasksByIds(task.prerequisiteIds) : []),
     [task]
@@ -181,20 +183,43 @@ export default function PracticeTaskPage({ id }: PracticeTaskPageProps) {
       <AchievementToast achievement={newAchievement} onDismiss={dismissAchievement} />
       <div className="min-h-screen px-4 py-12 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-6xl">
-          <Link
-            href="/practice"
-            className="mb-6 inline-flex items-center text-primary-500 hover:text-primary-600"
-          >
-            <svg className="mr-1 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M15 19l-7-7 7-7"
-              />
-            </svg>
-            返回练习列表
-          </Link>
+          <div className="mb-6 flex items-center justify-between">
+            <Link
+              href="/practice"
+              className="inline-flex items-center text-primary-500 hover:text-primary-600"
+            >
+              <svg className="mr-1 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M15 19l-7-7 7-7"
+                />
+              </svg>
+              返回练习列表
+            </Link>
+
+            <div className="flex items-center gap-3 text-sm">
+              {prevTask && (
+                <Link
+                  href={`/practice/${prevTask.id}`}
+                  className="rounded-lg bg-gray-100 px-3 py-1.5 text-gray-600 transition-colors hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
+                  title={`上一题：${prevTask.title}`}
+                >
+                  ← 上一题
+                </Link>
+              )}
+              {nextTask && (
+                <Link
+                  href={`/practice/${nextTask.id}`}
+                  className="rounded-lg bg-primary-100 px-3 py-1.5 text-primary-700 transition-colors hover:bg-primary-200 dark:bg-primary-900/40 dark:text-primary-300 dark:hover:bg-primary-900/60"
+                  title={`下一题：${nextTask.title}`}
+                >
+                  下一题 →
+                </Link>
+              )}
+            </div>
+          </div>
 
           <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
             <div className="lg:col-span-1">
@@ -230,6 +255,23 @@ export default function PracticeTaskPage({ id }: PracticeTaskPageProps) {
                 </div>
 
                 <p className="mb-6 text-gray-600 dark:text-gray-400">{task.description}</p>
+
+                {interactive && (
+                  <div className="mb-6">
+                    <div className="mb-1 flex items-baseline justify-between text-xs text-gray-500 dark:text-gray-400">
+                      <span>
+                        进度：步骤 {Math.min(currentStep + 1, task.steps.length)} / {task.steps.length}
+                      </span>
+                      <span>{Math.round((currentStep / task.steps.length) * 100)}%</span>
+                    </div>
+                    <div className="h-1.5 overflow-hidden rounded-full bg-gray-100 dark:bg-gray-700">
+                      <div
+                        className="h-full rounded-full bg-primary-500 transition-all duration-500"
+                        style={{ width: `${(currentStep / task.steps.length) * 100}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
 
                 {interactive && task.contextNote && (
                   <div className="mb-6 rounded-lg bg-blue-50 p-4 text-sm text-blue-800 dark:bg-blue-900/20 dark:text-blue-200">

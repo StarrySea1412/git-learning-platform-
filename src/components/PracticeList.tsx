@@ -29,14 +29,27 @@ export default function PracticeList() {
   const visibleSections = useMemo(
     () =>
       practiceSections
-        .map((section) => ({
-          ...section,
-          tasks: getPracticeTasksByIds(section.taskIds).filter((task) =>
+        .map((section) => {
+          const tasks = getPracticeTasksByIds(section.taskIds).filter((task) =>
             filter === '全部' ? true : task.difficulty === filter
-          ),
-        }))
+          );
+          const interactiveIds = section.taskIds.filter((id) =>
+            interactivePracticeTasks.some((t) => t.id === id)
+          );
+          const sectionDone = interactiveIds.filter((id) => completedIds.has(id)).length;
+          return {
+            ...section,
+            tasks,
+            sectionDone,
+            sectionTotal: interactiveIds.length,
+            sectionPercent:
+              interactiveIds.length === 0
+                ? 0
+                : Math.round((sectionDone / interactiveIds.length) * 100),
+          };
+        })
         .filter((section) => section.tasks.length > 0),
-    [filter]
+    [filter, completedIds]
   );
 
   return (
@@ -113,13 +126,40 @@ export default function PracticeList() {
           {visibleSections.map((section) => (
             <section key={section.id} id={section.id}>
               <div className="mb-6 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-                <div>
-                  <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
-                    {section.title}
-                  </h2>
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
+                      {section.title}
+                    </h2>
+                    {section.sectionTotal > 0 && (
+                      <span
+                        className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                          section.sectionPercent === 100
+                            ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300'
+                            : section.sectionPercent > 0
+                            ? 'bg-primary-100 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300'
+                            : 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
+                        }`}
+                      >
+                        {section.sectionPercent === 100
+                          ? '✓ 已通关'
+                          : `${section.sectionDone}/${section.sectionTotal}`}
+                      </span>
+                    )}
+                  </div>
                   <p className="mt-1 max-w-3xl text-sm text-gray-500 dark:text-gray-400">
                     {section.description}
                   </p>
+                  {section.sectionTotal > 0 && (
+                    <div className="mt-2 h-1 max-w-xs overflow-hidden rounded-full bg-gray-100 dark:bg-gray-700">
+                      <div
+                        className={`h-full rounded-full transition-all ${
+                          section.sectionPercent === 100 ? 'bg-green-500' : 'bg-primary-500'
+                        }`}
+                        style={{ width: `${section.sectionPercent}%` }}
+                      />
+                    </div>
+                  )}
                 </div>
                 <span
                   className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${

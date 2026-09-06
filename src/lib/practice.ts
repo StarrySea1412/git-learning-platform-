@@ -205,6 +205,16 @@ export function getNextPracticeTask(task: PracticeTask): PracticeTask | null {
   return task.nextTaskId ? getPracticeTaskById(task.nextTaskId) ?? null : null;
 }
 
+/** 通过反向扫描任务链找到上一题 */
+export function getPrevPracticeTask(task: PracticeTask): PracticeTask | null {
+  for (const candidate of practiceTasks) {
+    if (candidate.nextTaskId === task.id) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
 export function evaluateInteractivePracticeCommand(
   task: InteractivePracticeTask,
   stepIndex: number,
