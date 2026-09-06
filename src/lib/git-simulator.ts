@@ -1074,12 +1074,14 @@ export function executeCommand(state: GitState, input: string): ExecResult {
 
   if (parts[1] === 'commit') {
     const allowEmpty = command.includes('--allow-empty');
-    if (!state.staging && !allowEmpty) {
+    const isAmend = command.includes('--amend');
+
+    if (!state.staging && !allowEmpty && !isAmend) {
       return invalid(state, '没有可提交的内容，请先执行 git add。');
     }
 
     const msgMatch = command.match(
-      /git commit(?: --allow-empty)? -m ["'](.+?)["']/
+      /git commit(?: --allow-empty)?(?: --amend)? -m ["'](.+?)["']/
     );
     const message = msgMatch?.[1];
     if (!message) {
@@ -1108,6 +1110,8 @@ export function executeCommand(state: GitState, input: string): ExecResult {
         parents: headCommit.parents,
         configValue: amendConfig ?? headCommit.configValue ?? 'log_level=info',
       });
+      // amend 语义：旧提交被替换出分支历史，从图中移除以保持提交总数不变
+      next.commits.delete(headId);
 
       const branch = getHeadBranch(next);
       if (branch) {
@@ -1159,6 +1163,108 @@ export function executeCommand(state: GitState, input: string): ExecResult {
 
   if (parts[1] === 'status' && (parts.length === 2 || parts[2] === '-s' || parts[2] === '--short')) {
     return success(state, buildStatusOutput(state, parts[2] === '-s' || parts[2] === '--short'));
+  }
+
+  if (parts[1] === 'diff' && parts.length === 2) {
+    if (state.mergeConflict) {
+      const c = state.mergeConflict;
+      return success(
+        state,
+        [
+          `diff --git a/config.js b/config.js (冲突中)`,
+          `<<<<<<< HEAD: ${c.ours}`,
+          `=======: ${c.theirs}`,
+          `>>>>>>> ${c.sourceBranch}`,
+          `（使用 resolve-conflict 解决）`,
+        ].join('\n')
+      );
+    }
+
+    if (state.staging && !state.workingTreeDirty) {
+      return success(state, 'diff: 工作区与暂存区一致，没有未暂存的差异。');
+    }
+
+    if (state.workingTreeDirty) {
+      return success(
+        state,
+        [
+          'diff --git a/example.txt b/example.txt',
+          '--- a/example.txt',
+          '+++ b/example.txt',
+          '@@ -1 +1 @@',
+          '-旧内容',
+          '+新内容（尚未暂存）',
+        ].join('\n')
+      );
+    }
+
+    return success(state, '工作区很干净，没有任何差异。');
+  }
+
+  if (parts[1] === 'diff' && (parts[2] === '--staged' || parts[2] === '--cached')) {
+    if (!state.staging) {
+      return success(state, '暂存区没有待提交的差异。');
+    }
+
+    return success(
+      state,
+      [
+        'diff --git a/example.txt b/example.txt',
+        '--- a/example.txt',
+        '+++ b/example.txt',
+        '@@ -1 +1 @@',
+        '-旧内容',
+        '+新内容（已暂存，等待提交）',
+      ].join('\n')
+    );
+  }
+
+  if (parts[1] === 'show' && parts.length === 2) {
+    const headId = getHeadCommit(state);
+    if (!headId) {
+      return invalid(state, '当前 HEAD 无法解析到任何提交。');
+    }
+
+    const commit = state.commits.get(headId);
+    if (!commit) {
+      return invalid(state, '当前 HEAD 无法解析到任何提交。');
+    }
+
+    const lines = [
+      `commit ${commit.id}`,
+      `Author: 你 <you@example.com>`,
+      '',
+      `    ${commit.message}`,
+      '',
+    ];
+    if (commit.configValue) {
+      lines.push(`diff --git a/config.js b/config.js`, `+ config: ${commit.configValue}`);
+    }
+    return success(state, lines.join('\n'));
+  }
+
+  if (parts[1] === 'show' && parts.length === 3) {
+    const targetId = resolveCommitish(state, parts[2]);
+    if (!targetId) {
+      return invalid(state, `无法找到提交 "${parts[2]}"。`);
+    }
+
+    const commit = state.commits.get(targetId);
+    if (!commit) {
+      return invalid(state, `无法找到提交 "${parts[2]}"。`);
+    }
+
+    const lines = [
+      `commit ${commit.id}`,
+      `Author: 你 <you@example.com>`,
+      '',
+      `    ${commit.message}`,
+      '',
+    ];
+    if (commit.configValue) {
+      lines.push(`diff --git a/config.js b/config.js`, `+ config: ${commit.configValue}`);
+    }
+    return success(state, lines.join('\n'));
   }
 
   if (parts[1] === 'log') {
@@ -1372,12 +1478,24 @@ export function executeCommand(state: GitState, input: string): ExecResult {
       return invalid(state, '当前 HEAD 无法解析到任何提交。');
     }
 
-    // 倒数第二次 switch 的目标分支就是"上一个分支"
+    // reflog 里最近一次 switch 的"来源分支"就是上一个分支
+    const currentLabel = getHeadLabel(state);
     const previousTarget = state.reflog
       .filter((entry) => entry.action.startsWith('switch:'))
-      .map((entry) => entry.action.split('-> ')[1])
-      .filter((name) => name && name !== getHeadLabel(state))
-      .find((name) => state.branches.has(name));
+      .map((entry) => {
+        const match = entry.action.match(/^switch: .+? -> (.+)$/);
+        return match?.[1]?.trim() ?? '';
+      })
+      .find((name) => name && name !== currentLabel && state.branches.has(name))
+      // 没有目标可取时，从最近一次 switch 的 from 侧推断（存放在 entry.from 无法直接给名字，
+      // 因此再退一步：找出除了当前分支外、存在 switch 记录提到过的分支）
+      ?? state.reflog
+        .filter((entry) => entry.action.startsWith('switch:'))
+        .map((entry) => {
+          const from = entry.action.match(/^switch: (.+?) -> /);
+          return from?.[1]?.trim() ?? '';
+        })
+        .find((name) => name && name !== currentLabel && state.branches.has(name));
 
     if (!previousTarget) {
       return invalid(state, '找不到上一个分支（当前会话中没有可用的 switch 记录）。');
@@ -1395,6 +1513,7 @@ export function executeCommand(state: GitState, input: string): ExecResult {
     );
     return success(withReflog, `已切换到分支 "${previousTarget}"（上一个分支）。`);
   }
+
 
   if (parts[1] === 'switch' && parts.length === 3) {
     const target = parts[2];
