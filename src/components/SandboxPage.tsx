@@ -71,6 +71,7 @@ export default function SandboxPage() {
             initialOutput={[
               '欢迎来到自由沙盒。',
               '支持的命令：git status / add / commit / log / branch / checkout / switch / merge / rebase / reset / revert / cherry-pick / stash / reflog / remote / fetch / pull / push',
+              '冲突模拟：在 commit 后追加 config="值" 修改 config.js，两边改同一配置再 merge 即可触发冲突，用 resolve-conflict ours|theirs|both 解决。',
               '如果不确定从哪开始，先试试 git status。',
             ].join('\n')}
             resetKey={resetKey}

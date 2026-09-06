@@ -152,13 +152,13 @@ export const animationScenes: Record<AnimationId, AnimationScene> = {
     title: '识别冲突标记并做出正确取舍',
     summary: '先把冲突长什么样、解决流程是什么看明白，再进入更高强度的实操。',
     scenario: 'main 和 feature-login 改到了同一行代码，Git 不能替你决定最终结果，需要你人工判断。',
-    keyCommands: ['git merge feature-login', 'git add <file>', 'git commit'],
+    keyCommands: ['git merge feature-login', 'resolve-conflict ours', 'git add <file>', 'git commit'],
     focusPoints: [
       '冲突不是报错结束，而是 Git 暂停下来等待你给出明确结果。',
       '真实项目里常常不是“保留某一边”，而是把两边修改融合成最终版本。',
     ],
     pitfall: '只顾着删掉冲突标记，却没确认最终代码逻辑是否同时保住了两边真正需要的修改。',
-    relatedPracticeIds: ['merge-branch', 'rebase-branch'],
+    relatedPracticeIds: ['resolve-merge-conflict', 'merge-branch', 'rebase-branch'],
   },
   collaboration: {
     id: 'collaboration',

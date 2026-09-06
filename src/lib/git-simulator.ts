@@ -2,6 +2,8 @@ export interface GitCommit {
   id: string;
   message: string;
   parents: string[];
+  /** config.js 的"内容"值，用于模拟文件级合并冲突 */
+  configValue?: string;
 }
 
 export interface ReflogEntry {
@@ -14,6 +16,14 @@ export interface RemoteRepo {
   url: string;
   commits: Map<string, GitCommit>;
   branches: Map<string, string>;
+}
+
+export interface MergeConflict {
+  file: string;
+  base: string;
+  ours: string;
+  theirs: string;
+  sourceBranch: string;
 }
 
 export interface GitState {
@@ -31,6 +41,7 @@ export interface GitState {
   remote: RemoteRepo | null;
   remoteTracking: Map<string, string>; // "origin/<branch>" -> 本地图中的提交 id
   upstream: Map<string, string>; // "<branch>" -> "origin/<branch>"
+  mergeConflict: MergeConflict | null; // 冲突进行中（等待 resolve-conflict）
 }
 
 export interface CreateCollaborationStateOptions {
@@ -46,6 +57,8 @@ export interface CreateCollaborationStateOptions {
 export interface CreateInitialStateOptions {
   staging?: boolean;
   workingTreeDirty?: boolean;
+  /** config.js 的初始内容（冲突模拟用） */
+  configValue?: string;
 }
 
 export interface ExecResult {
@@ -87,6 +100,7 @@ export function cloneState(state: GitState): GitState {
       : null,
     remoteTracking: new Map(state.remoteTracking),
     upstream: new Map(state.upstream),
+    mergeConflict: state.mergeConflict ? { ...state.mergeConflict } : null,
   };
 }
 
@@ -99,6 +113,7 @@ export function createInitialState(
     id: initId,
     message: 'initial commit',
     parents: [],
+    configValue: options.configValue ?? 'log_level=info',
   };
 
   return {
@@ -118,6 +133,7 @@ export function createInitialState(
     remote: null,
     remoteTracking: new Map(),
     upstream: new Map(),
+    mergeConflict: null,
   };
 }
 
@@ -572,7 +588,8 @@ function getUnsupportedMessage(command: string): string {
 function createCommitFromHead(
   state: GitState,
   message: string,
-  action: string
+  action: string,
+  configValue?: string
 ): ExecResult {
   const headId = getHeadCommit(state);
   if (!headId) {
@@ -581,7 +598,15 @@ function createCommitFromHead(
 
   const id = shortId();
   const next = cloneState(state);
-  next.commits.set(id, { id, message, parents: [headId] });
+  next.commits.set(id, {
+    id,
+    message,
+    parents: [headId],
+    configValue:
+      configValue ??
+      state.commits.get(headId)?.configValue ??
+      'log_level=info',
+  });
 
   const branch = getHeadBranch(next);
   if (branch) {
@@ -871,6 +896,76 @@ export function executeCommand(state: GitState, input: string): ExecResult {
   const parts = command.split(' ');
 
   if (parts[0] !== 'git') {
+    // 本平台的辅助命令（模拟冲突解决界面操作）
+    if (command === 'resolve-conflict' || parts[0] === 'resolve-conflict') {
+      if (!state.mergeConflict) {
+        return invalid(state, '当前没有待解决的合并冲突。');
+      }
+
+      const choice = parts[1];
+      const conflict = state.mergeConflict;
+      if (choice !== 'ours' && choice !== 'theirs' && choice !== 'both') {
+        return invalid(
+          state,
+          [
+            `config.js 中的冲突内容:`,
+            `<<<<<<< HEAD（当前分支）`,
+            conflict.ours,
+            '=======',
+            conflict.theirs,
+            `>>>>>>> ${conflict.sourceBranch}`,
+            ``,
+            `使用 resolve-conflict ours|theirs|both 选择保留方案。`,
+          ].join('\n')
+        );
+      }
+
+      const headId = getHeadCommit(state);
+      if (!headId) {
+        return invalid(state, '当前 HEAD 无法解析到任何提交。');
+      }
+
+      const currentBranch = getHeadBranch(state);
+      if (!currentBranch) {
+        return invalid(state, '分离 HEAD 状态下不支持合并。');
+      }
+
+      const resolvedValue =
+        choice === 'ours'
+          ? conflict.ours
+          : choice === 'theirs'
+            ? conflict.theirs
+            : `${conflict.ours} + ${conflict.theirs}`;
+
+      const id = shortId();
+      const next = cloneState(state);
+      next.commits.set(id, {
+        id,
+        message: `Merge branch '${conflict.sourceBranch}' (resolved: ${choice})`,
+        parents: [headId, state.branches.get(conflict.sourceBranch) ?? headId],
+        configValue: resolvedValue,
+      });
+      next.branches.set(currentBranch, id);
+      next.HEAD = `ref: ${currentBranch}`;
+      next.mergeConflict = null;
+      next.workingTreeDirty = false;
+
+      const withReflog = appendReflog(
+        next,
+        `merge ${conflict.sourceBranch}`,
+        headId,
+        id
+      );
+      return success(
+        withReflog,
+        [
+          `已按 "${choice}" 方案解决 config.js 冲突。`,
+          `config.js -> ${resolvedValue}`,
+          "Merge made by the 'ort' strategy.",
+        ].join('\n')
+      );
+    }
+
     return unsupported(state, '当前沙盒仅支持 Git 命令。');
   }
 
@@ -910,6 +1005,13 @@ export function executeCommand(state: GitState, input: string): ExecResult {
     command === 'git add --all' ||
     command === 'git add -A'
   ) {
+    if (state.mergeConflict) {
+      return invalid(
+        state,
+        '存在未解决的合并冲突，请先执行 resolve-conflict 解决冲突。'
+      );
+    }
+
     if (!state.workingTreeDirty) {
       return invalid(state, '没有检测到可暂存的工作区改动。');
     }
@@ -945,7 +1047,17 @@ export function executeCommand(state: GitState, input: string): ExecResult {
       return invalid(state, '请使用 git commit -m "提交信息" 提交。');
     }
 
-    return createCommitFromHead(state, message, `commit: ${message}`);
+    // config=参数模拟"修改 config.js 的内容"（冲突模拟用）
+    const configMatch = command.match(/config=("([^"]+)"|'([^']+)')/);
+    const configValue =
+      configMatch?.[2] ?? configMatch?.[3] ?? undefined;
+
+    return createCommitFromHead(
+      state,
+      message,
+      `commit: ${message}`,
+      configValue
+    );
   }
 
   if (parts[1] === 'status' && (parts.length === 2 || parts[2] === '-s' || parts[2] === '--short')) {
@@ -1166,12 +1278,51 @@ export function executeCommand(state: GitState, input: string): ExecResult {
       return invalid(state, '分离 HEAD 状态下不支持合并。');
     }
 
+    // 冲突判定：双方各自基于共同祖先修改了 config.js
+    const baseId = findCommonAncestor(state, headId, sourceCommit);
+    const baseConfig = baseId
+      ? state.commits.get(baseId)?.configValue ?? null
+      : null;
+    const oursConfig = state.commits.get(headId)?.configValue ?? null;
+    const theirsConfig = state.commits.get(sourceCommit)?.configValue ?? null;
+
+    if (
+      baseConfig !== null &&
+      oursConfig !== null &&
+      theirsConfig !== null &&
+      oursConfig !== baseConfig &&
+      theirsConfig !== baseConfig &&
+      oursConfig !== theirsConfig
+    ) {
+      const conflict: MergeConflict = {
+        file: 'config.js',
+        base: baseConfig,
+        ours: oursConfig,
+        theirs: theirsConfig,
+        sourceBranch,
+      };
+      const conflicted = cloneState(state);
+      conflicted.mergeConflict = conflict;
+      conflicted.workingTreeDirty = true;
+      return invalid(
+        conflicted,
+        [
+          `Auto-merging config.js`,
+          `CONFLICT (content): Merge conflict in config.js`,
+          `Automatic merge failed; fix conflicts and then commit the result.`,
+          `（在本平台执行 resolve-conflict 命令解决冲突）`,
+        ].join('\n')
+      );
+    }
+
     const id = shortId();
     const next = cloneState(state);
     next.commits.set(id, {
       id,
       message: `Merge branch '${sourceBranch}'`,
       parents: [headId, sourceCommit],
+      configValue:
+        theirsConfig !== baseConfig ? theirsConfig ?? undefined : oursConfig ?? undefined,
     });
     next.branches.set(currentBranch, id);
     next.HEAD = `ref: ${currentBranch}`;

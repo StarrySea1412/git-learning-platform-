@@ -481,7 +481,7 @@ export const practiceTasks: PracticeTask[] = [
     topic: '分支协作',
     prerequisiteIds: ['create-branch'],
     estimatedMinutes: 10,
-    nextTaskId: 'push-feature',
+    nextTaskId: 'resolve-merge-conflict',
     successMessage: '🎉 合并完成，你已经看到了一个真实的 merge commit。',
     contextNote:
       'main 和 feature 已经各自前进了一次提交，现在需要在 main 上执行合并。',
@@ -516,6 +516,82 @@ export const practiceTasks: PracticeTask[] = [
             nextHead.message === "Merge branch 'feature'"
           );
         },
+      },
+    ],
+  },
+  {
+    id: 'resolve-merge-conflict',
+    mode: 'interactive',
+    title: '解决合并冲突',
+    description: '两边都改了 config.js，Git 停下来等你拍板：体验冲突标记，做出取舍。',
+    difficulty: '进阶',
+    topic: '分支协作',
+    prerequisiteIds: ['merge-branch'],
+    estimatedMinutes: 12,
+    nextTaskId: 'push-feature',
+    successMessage: '🎉 你刚刚经历了真实开发中最让人紧张的场景——并亲手化解了它。冲突不可怕，可怕的是不看内容乱选。',
+    contextNote:
+      'main 把 config.js 的 log_level 改成了 debug；feature 分支把它改成了 trace。两边都动了同一行，合并必然冲突。',
+    terminalIntro:
+      '任务：合并 feature，查看冲突标记，选择保留方案完成合并。',
+    createInitialState: () => {
+      let state = createInitialState({ configValue: 'log_level=info' });
+      state = executeCommand(state, 'git branch feature').state;
+
+      state = { ...state, staging: true };
+      state = executeCommand(
+        state,
+        'git commit -m "main: set log level" config="log_level=debug"'
+      ).state;
+
+      state = executeCommand(state, 'git checkout feature').state;
+      state = { ...state, staging: true };
+      state = executeCommand(
+        state,
+        'git commit -m "feat: switch to trace logging" config="log_level=trace"'
+      ).state;
+
+      return executeCommand(state, 'git checkout main').state;
+    },
+    steps: [
+      {
+        instruction: '尝试把 feature 合并进 main，观察冲突提示。',
+        acceptedCommands: ['git merge feature'],
+        hint: '直接执行 git merge feature，注意 CONFLICT 字样。',
+        validate: ({ nextState }) => nextState.mergeConflict !== null,
+      },
+      {
+        instruction: '查看冲突内容：不带参数执行 resolve-conflict。',
+        acceptedCommands: ['resolve-conflict'],
+        hint: '输入 resolve-conflict 可以看到 <<<<<<< ======= >>>>>>> 标记的双方内容。',
+        validate: ({ result }) =>
+          !result.ok &&
+          result.output.includes('<<<<<<<') &&
+          result.output.includes('>>>>>>>'),
+      },
+      {
+        instruction:
+          'main 上的 debug 级别是测试环境验证过的，保留当前分支的版本（ours）。',
+        acceptedCommands: ['resolve-conflict ours'],
+        hint: '使用 resolve-conflict ours 保留 HEAD 一侧。',
+        validate: ({ nextState, result }) => {
+          const headId = getHeadCommit(nextState);
+          const head = headId ? nextState.commits.get(headId) : null;
+
+          return (
+            result.ok &&
+            nextState.mergeConflict === null &&
+            head?.parents.length === 2 &&
+            head?.configValue === 'log_level=debug'
+          );
+        },
+      },
+      {
+        instruction: '用 git log 确认合并提交的信息里带上了 resolved 标记。',
+        acceptedCommands: ['git log --oneline'],
+        hint: '使用 git log --oneline，查看最新提交的 (resolved: ours) 后缀。',
+        validate: ({ result }) =>
+          result.ok && result.output.includes('resolved: ours'),
       },
     ],
   },
@@ -1299,9 +1375,9 @@ export const practiceSections: PracticeSection[] = [
   {
     id: 'core-branches',
     title: '分支协作',
-    description: '理解分支创建、切换和合并，是后续高级场景的前置能力。',
+    description: '理解分支创建、切换、合并，并亲手解决一次真实的合并冲突。',
     kind: 'core',
-    taskIds: ['create-branch', 'merge-branch'],
+    taskIds: ['create-branch', 'merge-branch', 'resolve-merge-conflict'],
   },
   {
     id: 'core-remote',
