@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
-import { advancedLabSections } from '@/lib/practice';
+import { advancedLabSections, getRecommendedTask } from '@/lib/practice';
 import { usePracticeProgressStore } from '@/lib/usePracticeProgress';
 
 interface HomeStat {
@@ -45,6 +45,11 @@ export default function HomeContent({ stats }: HomeContentProps) {
     ...stats,
     ...(mounted && streak > 0 ? [{ label: '天连续学习', value: streak }] : []),
   ];
+
+  const recommendation = useMemo(
+    () => (mounted ? getRecommendedTask(completedIds) : null),
+    [mounted, completedIds]
+  );
 
   return (
     <div className="min-h-screen">
@@ -134,6 +139,28 @@ export default function HomeContent({ stats }: HomeContentProps) {
             >
               你已经完成了 {completedIds.size} 道可交互练习，继续保持节奏。
             </motion.p>
+          )}
+
+          {mounted && completedIds.size > 0 && recommendation && (
+            <motion.div
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4, delay: 0.4 }}
+              className="mx-auto mt-4 max-w-md rounded-xl border border-primary-100 bg-white/90 p-4 text-left shadow-sm backdrop-blur dark:border-primary-900/40 dark:bg-gray-800/90"
+            >
+              <div className="text-xs font-semibold uppercase tracking-widest text-primary-500">
+                为你推荐
+              </div>
+              <Link
+                href={`/practice/${recommendation.id}`}
+                className="mt-1 block font-semibold text-gray-900 hover:text-primary-600 dark:text-white"
+              >
+                {recommendation.title} →
+              </Link>
+              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                {recommendation.description}
+              </p>
+            </motion.div>
           )}
         </div>
       </section>

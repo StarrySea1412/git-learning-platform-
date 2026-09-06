@@ -1658,3 +1658,97 @@ export const interactivePracticeTaskIds = interactivePracticeTasks.map(
   (task) => task.id
 );
 export const interactivePracticeTaskIdSet = new Set(interactivePracticeTaskIds);
+
+/**
+ * 学习路径推荐：基于完成情况推荐"接下来最值得做的一课"。
+ *
+ * 优先级：
+ * 1. 章节顺序遍历，找到第一个未完成的可交互任务
+ * 2. 若该任务的前置未完成，沿着前置链回溯到最早未完成的那一课
+ * 3. 全部完成时返回 null
+ */
+export function getRecommendedTask(completedIds: Set<string>): PracticeTask | null {
+  for (const section of practiceSections) {
+    for (const id of section.taskIds) {
+      const task = getPracticeTaskById(id);
+      if (!task || !isInteractiveTask(task) || completedIds.has(id)) {
+        continue;
+      }
+
+      // 沿前置链回溯：找最早未完成的前置
+      let candidate: PracticeTask = task;
+      const visited = new Set<string>();
+      while (true) {
+        if (visited.has(candidate.id)) break;
+        visited.add(candidate.id);
+
+        let unfinishedPrereq: InteractivePracticeTask | undefined;
+        for (const pid of candidate.prerequisiteIds) {
+          const p = getPracticeTaskById(pid);
+          if (p && isInteractiveTask(p) && !completedIds.has(p.id)) {
+            unfinishedPrereq = p;
+            break;
+          }
+        }
+
+        if (!unfinishedPrereq) {
+          break;
+        }
+        candidate = unfinishedPrereq;
+      }
+
+      return candidate;
+    }
+  }
+
+  return null;
+}
+
+/** 计算每个主题的掌握度（完成数/总数），用于找薄弱区 */
+export function getTopicMastery(completedIds: Set<string>): Array<{
+  topic: PracticeTopic;
+  done: number;
+  total: number;
+  percent: number;
+}> {
+  const topics = new Map<PracticeTopic, { done: number; total: number }>();
+
+  for (const task of interactivePracticeTasks) {
+    const entry = topics.get(task.topic) ?? { done: 0, total: 0 };
+    entry.total += 1;
+    if (completedIds.has(task.id)) {
+      entry.done += 1;
+    }
+    topics.set(task.topic, entry);
+  }
+
+  return Array.from(topics.entries()).map(([topic, { done, total }]) => ({
+    topic,
+    done,
+    total,
+    percent: total === 0 ? 0 : Math.round((done / total) * 100),
+  }));
+}
+
+/** 找掌握度最低且未全部完成的主题（有"可推荐练习"的），用于弱项提示 */
+export function getWeakestTopic(completedIds: Set<string>): {
+  topic: PracticeTopic;
+  percent: number;
+  nextTask: InteractivePracticeTask | null;
+} | null {
+  const mastery = getTopicMastery(completedIds)
+    .filter((m) => m.percent < 100)
+    .sort((a, b) => a.percent - b.percent);
+
+  for (const m of mastery) {
+    const nextTask =
+      interactivePracticeTasks.find(
+        (task) => task.topic === m.topic && !completedIds.has(task.id)
+      ) ?? null;
+    if (nextTask) {
+      return { topic: m.topic, percent: m.percent, nextTask };
+    }
+  }
+
+  return null;
+}

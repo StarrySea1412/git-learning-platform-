@@ -3,7 +3,12 @@
 import { useMemo } from 'react';
 import Link from 'next/link';
 import { usePracticeProgress } from '@/lib/usePracticeProgress';
-import { interactivePracticeTasks, practiceSections, getPracticeTaskById } from '@/lib/practice';
+import {
+  interactivePracticeTasks,
+  getRecommendedTask,
+  getTopicMastery,
+  getWeakestTopic,
+} from '@/lib/practice';
 import { achievements } from '@/lib/achievements';
 
 const TOPIC_ORDER = [
@@ -13,6 +18,7 @@ const TOPIC_ORDER = [
   '提交搬运',
   '历史整理',
   '恢复与切换',
+  '扩展概念',
 ] as const;
 
 function getActivityColor(count: number): string {
@@ -65,11 +71,9 @@ export default function StatsPage() {
 
   const topicStats = useMemo(
     () =>
-      TOPIC_ORDER.map((topic) => {
-        const tasks = interactivePracticeTasks.filter((task) => task.topic === topic);
-        const done = tasks.filter((task) => completedIds.has(task.id)).length;
-        return { topic, done, total: tasks.length };
-      }).filter((item) => item.total > 0),
+      getTopicMastery(completedIds).filter(({ topic }) =>
+        (TOPIC_ORDER as readonly string[]).includes(topic)
+      ),
     [completedIds]
   );
 
@@ -80,17 +84,10 @@ export default function StatsPage() {
   const percent =
     totalInteractive === 0 ? 0 : Math.round((totalDone / totalInteractive) * 100);
 
-  const nextIncomplete = useMemo(() => {
-    for (const section of practiceSections) {
-      for (const id of section.taskIds) {
-        const task = getPracticeTaskById(id);
-        if (task && task.mode === 'interactive' && !completedIds.has(id)) {
-          return task;
-        }
-      }
-    }
-    return null;
-  }, [completedIds]);
+  const nextIncomplete = useMemo(() => getRecommendedTask(completedIds), [completedIds]);
+
+  // 薄弱主题：掌握度最低且未做完的方向
+  const weakest = useMemo(() => getWeakestTopic(completedIds), [completedIds]);
 
   return (
     <div className="min-h-screen px-4 py-12 sm:px-6 lg:px-8">
@@ -155,6 +152,23 @@ export default function StatsPage() {
                 {nextIncomplete.title}
               </Link>
               <span className="ml-2 text-gray-400">{nextIncomplete.description}</span>
+            </div>
+          )}
+          {weakest?.nextTask && (
+            <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm dark:border-amber-800 dark:bg-amber-900/20">
+              <span className="font-medium text-amber-800 dark:text-amber-200">
+                薄弱方向：
+              </span>
+              <span className="text-amber-700 dark:text-amber-300">
+                「{weakest.topic}」目前完成 {weakest.percent}%，建议从
+              </span>
+              <Link
+                href={`/practice/${weakest.nextTask.id}`}
+                className="mx-1 font-medium text-amber-800 underline dark:text-amber-200"
+              >
+                {weakest.nextTask.title}
+              </Link>
+              <span className="text-amber-700 dark:text-amber-300">开始补强。</span>
             </div>
           )}
         </div>
