@@ -6,17 +6,22 @@ import { AnimatePresence, motion } from 'framer-motion';
 import AchievementToast from '@/components/AchievementToast';
 import CodeBlock from '@/components/CodeBlock';
 import GitGraph from '@/components/GitGraph';
+import SectionCelebration from '@/components/SectionCelebration';
 import Terminal from '@/components/Terminal';
 import {
   evaluateInteractivePracticeCommand,
   getNextPracticeTask,
+  getNextSection,
   getPrevPracticeTask,
   getPracticeTaskById,
   getPracticeTaskHints,
   getPracticeTaskInstructions,
   getPracticeTasksByIds,
   getReferenceCommands,
+  getSectionCompletion,
+  interactivePracticeTasks,
   isInteractiveTask,
+  practiceSections,
 } from '@/lib/practice';
 import {
   createInitialState,
@@ -31,9 +36,13 @@ interface PracticeTaskPageProps {
   id: string;
 }
 
+function findSectionOfTask(taskId: string) {
+  return practiceSections.find((s) => s.taskIds.includes(taskId)) ?? null;
+}
+
 export default function PracticeTaskPage({ id }: PracticeTaskPageProps) {
   const task = getPracticeTaskById(id);
-  const { markCompleted, newAchievement, dismissAchievement, isCompleted } =
+  const { markCompleted, newAchievement, dismissAchievement, isCompleted, completedIds, streak } =
     usePracticeProgress();
   const [completed, setCompleted] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
@@ -44,12 +53,35 @@ export default function PracticeTaskPage({ id }: PracticeTaskPageProps) {
   const [lastTeaching, setLastTeaching] = useState<string | null>(null);
   /** 步骤完成的脉冲动画计数 */
   const [stepPulse, setStepPulse] = useState(0);
+  /** 章节通关庆祝弹窗 */
+  const [showCelebration, setShowCelebration] = useState(false);
   const [gitState, setGitState] = useState<GitState>(() =>
     task && isInteractiveTask(task) ? task.createInitialState() : createInitialState()
   );
 
   const nextTask = task ? getNextPracticeTask(task) : null;
   const prevTask = task ? getPrevPracticeTask(task) : null;
+  const celebrationSection = useMemo(() => {
+    if (!task) {
+      return null;
+    }
+    const section = practiceSections.find((s) => s.taskIds.includes(task.id));
+    if (!section) {
+      return null;
+    }
+    const next = getNextSection(section.id);
+    return next ? { id: next.taskIds[0] ?? '', title: next.title, description: next.description } : null;
+  }, [task]);
+  const sectionDoneCount = useMemo(() => {
+    if (!task) {
+      return 0;
+    }
+    const section = practiceSections.find((s) => s.taskIds.includes(task.id));
+    if (!section) {
+      return 0;
+    }
+    return getSectionCompletion(section.id, completedIds ?? new Set()).done;
+  }, [task, completedIds]);
   const prerequisites = useMemo(
     () => (task ? getPracticeTasksByIds(task.prerequisiteIds) : []),
     [task]
@@ -140,6 +172,20 @@ export default function PracticeTaskPage({ id }: PracticeTaskPageProps) {
       if (evaluation.completed) {
         setCompleted(true);
         markCompleted(task.id);
+
+        // 章节通关检测：本任务所在章节是否因这一题全部完成
+        if (task) {
+          const section = findSectionOfTask(task.id);
+          if (section) {
+            const nextIds = new Set(completedIds ?? new Set());
+            nextIds.add(task.id);
+            const completion = getSectionCompletion(section.id, nextIds);
+            if (completion.allDone && completion.total > 1) {
+              // 延迟弹出让"任务完成"面板先被看到
+              setTimeout(() => setShowCelebration(true), 800);
+            }
+          }
+        }
       }
 
       return {
@@ -147,7 +193,7 @@ export default function PracticeTaskPage({ id }: PracticeTaskPageProps) {
         output: evaluation.feedback,
       };
     },
-    [currentStep, gitState, markCompleted, task]
+    [completedIds, currentStep, gitState, markCompleted, task]
   );
 
   const handleRetry = useCallback(() => {
@@ -530,6 +576,17 @@ export default function PracticeTaskPage({ id }: PracticeTaskPageProps) {
                     ].join('\n')}
                     resetKey={resetKey}
                   />
+                  {showCelebration && (
+                    <SectionCelebration
+                      sectionTitle={findSectionOfTask(task.id)?.title ?? ''}
+                      doneCount={sectionDoneCount}
+                      totalCompleted={completedIds.size}
+                      totalAll={interactivePracticeTasks.length}
+                      streak={streak}
+                      nextSection={celebrationSection}
+                      onClose={() => setShowCelebration(false)}
+                    />
+                  )}
                 </>
               ) : (
                 <div className="space-y-6 rounded-xl border border-gray-100 bg-white p-6 shadow-lg dark:border-gray-700 dark:bg-gray-800">

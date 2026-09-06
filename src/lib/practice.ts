@@ -1755,6 +1755,29 @@ export const advancedLabSections = practiceSections.filter(
   (section) => section.kind === 'lab'
 );
 
+/** 判断某章节是否全部可交互练习已完成（用于通关仪式） */
+export function getSectionCompletion(
+  sectionId: string,
+  completedIds: Set<string>
+): { total: number; done: number; allDone: boolean } {
+  const section = practiceSections.find((s) => s.id === sectionId);
+  if (!section) {
+    return { total: 0, done: 0, allDone: false };
+  }
+
+  const interactiveIds = section.taskIds.filter((id) => interactivePracticeTaskIdSet.has(id));
+  const done = interactiveIds.filter((id) => completedIds.has(id)).length;
+  return { total: interactiveIds.length, done, allDone: interactiveIds.length > 0 && done === interactiveIds.length };
+}
+
+/** 找到章节的下一个章节（按 practiceSections 顺序） */
+export function getNextSection(sectionId: string) {
+  const index = practiceSections.findIndex((s) => s.id === sectionId);
+  return index >= 0 && index < practiceSections.length - 1
+    ? practiceSections[index + 1]
+    : null;
+}
+
 export const interactivePracticeTasks = practiceTasks.filter(isInteractiveTask);
 export const interactivePracticeTaskIds = interactivePracticeTasks.map(
   (task) => task.id
