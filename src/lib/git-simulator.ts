@@ -54,6 +54,13 @@ export interface CreateCollaborationStateOptions {
   localMessages?: string[];
 }
 
+export interface InteractivePracticeTaskConfig {
+  /** 用户完成第几步后，虚拟队友向 origin/main 推送新提交 */
+  triggerAfterStep: number;
+  /** 队友推送的提交信息 */
+  message: string;
+}
+
 export interface CreateInitialStateOptions {
   staging?: boolean;
   workingTreeDirty?: boolean;
@@ -68,11 +75,40 @@ export interface ExecResult {
   reason?: 'unsupported' | 'invalid' | 'ok';
 }
 
-export interface ExecResult {
-  ok: boolean;
-  output: string;
-  state: GitState;
-  reason?: 'unsupported' | 'invalid' | 'ok';
+/**
+ * 虚拟队友：练习进行中，队友"突然"往 origin/main 推送一个新提交。
+ * 只改远程和队友视角，本地仓库（含 origin/main 镜像）保持不动——
+ * 需要用户自己 fetch 才能发现，这正是要训练的肌肉记忆。
+ */
+export function teammatePush(state: GitState, message: string): ExecResult {
+  if (!state.remote) {
+    return invalid(state, '当前仓库没有远程仓库，队友无处推送。');
+  }
+
+  const next = cloneState(state);
+  const remote = next.remote!;
+  const remoteHead = remote.branches.get('main');
+
+  if (!remoteHead || !remote.commits.has(remoteHead)) {
+    return invalid(state, '远程仓库状态异常，无法模拟队友推送。');
+  }
+
+  const id = shortId();
+  remote.commits.set(id, {
+    id,
+    message,
+    parents: [remoteHead],
+  });
+  remote.branches.set('main', id);
+
+  return success(
+    next,
+    [
+      `🔔 你的队友刚刚向 origin/main 推送了一个新提交：`,
+      `   ${id.slice(0, 7)} ${message}`,
+      `你本地的 origin/main 镜像还没有更新——先 fetch 看看？`,
+    ].join('\n')
+  );
 }
 
 let _seq = 0;

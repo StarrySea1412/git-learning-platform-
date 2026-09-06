@@ -5,6 +5,7 @@ import {
   executeCommand,
   getHeadBranch,
   getHeadCommit,
+  teammatePush,
 } from '@/lib/git-simulator';
 
 describe('git-simulator', () => {
@@ -135,9 +136,41 @@ describe('git-simulator', () => {
   });
 });
 
+describe('虚拟队友推送', () => {
+  it('teammatePush 更新远程但不触碰本地镜像', () => {
+    const state = createCollaborationState({ sharedMessages: ['setup project'] });
+    const localTrackingBefore = state.remoteTracking.get('origin/main');
+    const remoteHeadBefore = state.remote?.branches.get('main');
+
+    const result = teammatePush(state, 'teammate: hotfix search');
+    const remoteHeadAfter = result.state.remote?.branches.get('main');
+
+    expect(result.ok).toBe(true);
+    expect(remoteHeadAfter).not.toBe(remoteHeadBefore);
+    // 本地镜像保持不动——用户必须自己 fetch 才能发现
+    expect(result.state.remoteTracking.get('origin/main')).toBe(
+      localTrackingBefore
+    );
+    expect(result.state.branches.get('main')).toBe(state.branches.get('main'));
+    expect(result.output).toContain('teammate: hotfix search');
+    expect(result.output).toContain('fetch');
+  });
+
+  it('fetch 后能看到队友的新提交', () => {
+    const state = createCollaborationState({ sharedMessages: ['setup project'] });
+    const pushed = teammatePush(state, 'teammate: hotfix search');
+    const fetched = executeCommand(pushed.state, 'git fetch origin');
+
+    expect(fetched.ok).toBe(true);
+    expect(fetched.state.remoteTracking.get('origin/main')).toBe(
+      pushed.state.remote?.branches.get('main')
+    );
+    expect(fetched.output).toContain('origin/main');
+  });
+});
+
 describe('git-simulator 远程协作', () => {
-  it('clones a remote repository and configures origin tracking', () => {
-    const result = executeCommand(
+  it('clones a remote repository and configures origin tracking', () => {    const result = executeCommand(
       createInitialState(),
       'git clone https://github.com/team/project.git'
     );

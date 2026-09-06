@@ -33,6 +33,13 @@ export interface PracticeStep {
   validate: (context: PracticeValidationContext) => boolean;
 }
 
+export interface TeammatePushConfig {
+  /** 该步完成后，虚拟队友向 origin/main 推送新提交 */
+  afterStepIndex: number;
+  /** 队友推送的提交信息 */
+  message: string;
+}
+
 interface PracticeTaskBase {
   id: string;
   title: string;
@@ -51,6 +58,8 @@ export interface InteractivePracticeTask extends PracticeTaskBase {
   terminalIntro?: string;
   createInitialState: () => GitState;
   steps: PracticeStep[];
+  /** 虚拟队友配置：练习进行中队友"突然"推送，训练 fetch 肌肉记忆 */
+  teammatePush?: TeammatePushConfig;
 }
 
 export interface ConceptPracticeTask extends PracticeTaskBase {
@@ -76,6 +85,8 @@ export interface EvaluatePracticeResult {
   completed: boolean;
   nextStepIndex: number;
   feedback: string;
+  /** 虚拟队友在此步之后触发推送（ PracticeTaskPage 需据此更新远程状态） */
+  teammatePushMessage?: string;
 }
 
 function cloneStateMaps(state: GitState): GitState {
@@ -236,11 +247,18 @@ export function evaluateInteractivePracticeCommand(
       };
     }
 
+    const push = task.teammatePush;
+    const teammatePushMessage =
+      push && push.afterStepIndex === stepIndex ? push.message : undefined;
+
     return {
       advanced: true,
       completed: false,
       nextStepIndex,
-      feedback: `步骤 ${stepIndex + 1} 已完成。\n下一步：${task.steps[nextStepIndex].instruction}`,
+      feedback: teammatePushMessage
+        ? `步骤 ${stepIndex + 1} 已完成。\n${teammatePushMessage}`
+        : `步骤 ${stepIndex + 1} 已完成。\n下一步：${task.steps[nextStepIndex].instruction}`,
+      teammatePushMessage,
     };
   }
 
@@ -647,7 +665,7 @@ export const practiceTasks: PracticeTask[] = [
     id: 'pull-teammate-changes',
     mode: 'interactive',
     title: '同步队友推送的更新',
-    description: '队友把新提交推到了 origin/main，先 fetch 观察，再合并进本地。',
+    description: '练习中队友会"突然"推送新提交——先 fetch 观察，再合并进本地。',
     difficulty: '进阶',
     topic: '远程协作',
     prerequisiteIds: ['push-feature'],
@@ -655,18 +673,30 @@ export const practiceTasks: PracticeTask[] = [
     nextTaskId: 'push-rejected-recovery',
     successMessage: '🎉 队友的工作已经同步到本地 main，这就是团队日常同步的基本节奏。',
     contextNote:
-      '队友刚刚往 origin/main 推送了一个提交，但你本地的 origin/main 还停留在旧位置。本地工作区是干净的。',
+      '你所在的团队共享 origin/main 仓库。注意：练习进行中，队友随时可能推送新提交——推送被拒或状态不对时，第一反应应该是 fetch。',
     terminalIntro: '任务：先用 git fetch 查看远程更新，再把 origin/main 合并进本地 main。',
     createInitialState: () =>
       createCollaborationState({
         sharedMessages: ['setup project'],
-        teammateMessages: ['teammate: add user docs'],
       }),
+    teammatePush: {
+      // 第 1 步（fetch）完成后，队友再次推送——训练"push 前先 fetch"的肌肉记忆
+      afterStepIndex: 0,
+      message: 'teammate: fix navbar overflow',
+    },
     steps: [
       {
         instruction: '从远程获取最新状态（只下载，不合并）。',
         acceptedCommands: ['git fetch', 'git fetch origin'],
         hint: '使用 git fetch 或 git fetch origin。',
+        validate: ({ previousState, nextState }) =>
+          nextState.remoteTracking.get('origin/main') !==
+          previousState.remoteTracking.get('origin/main'),
+      },
+      {
+        instruction: '队友又推了新提交！再次 fetch，看看远程最新状态。',
+        acceptedCommands: ['git fetch', 'git fetch origin'],
+        hint: '队友推送不会自动同步到你本地，再执行一次 git fetch。',
         validate: ({ previousState, nextState }) =>
           nextState.remoteTracking.get('origin/main') !==
           previousState.remoteTracking.get('origin/main'),

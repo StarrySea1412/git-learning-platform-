@@ -17,7 +17,12 @@ import {
   getReferenceCommands,
   isInteractiveTask,
 } from '@/lib/practice';
-import { createInitialState, executeCommand, type GitState } from '@/lib/git-simulator';
+import {
+  createInitialState,
+  executeCommand,
+  teammatePush,
+  type GitState,
+} from '@/lib/git-simulator';
 import { getTutorialsForPracticeTask } from '@/lib/tutorials';
 import { usePracticeProgress } from '@/lib/usePracticeProgress';
 
@@ -95,7 +100,7 @@ export default function PracticeTaskPage({ id }: PracticeTaskPageProps) {
 
       const previousState = gitState;
       const result = executeCommand(previousState, command);
-      setGitState(result.state);
+      let nextState = result.state;
 
       const evaluation = evaluateInteractivePracticeCommand(
         task,
@@ -104,6 +109,16 @@ export default function PracticeTaskPage({ id }: PracticeTaskPageProps) {
         previousState,
         result
       );
+
+      // 虚拟队友：该步完成后，队友"突然"向 origin/main 推送新提交
+      if (evaluation.teammatePushMessage) {
+        const push = teammatePush(nextState, evaluation.teammatePushMessage);
+        if (push.ok) {
+          nextState = push.state;
+        }
+      }
+
+      setGitState(nextState);
 
       if (evaluation.advanced) {
         setCurrentStep(evaluation.nextStepIndex);
