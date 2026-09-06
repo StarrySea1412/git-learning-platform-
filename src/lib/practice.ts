@@ -1291,40 +1291,141 @@ export const practiceTasks: PracticeTask[] = [
   },
   {
     id: 'add-worktree',
-    mode: 'conceptual',
+    mode: 'interactive',
     title: '添加工作树',
-    description: '理解如何用 worktree 在新目录中同时检出其他分支。',
+    description: '用 worktree 在新目录中同时检出其他分支，不用反复切换。',
     difficulty: '高级',
     topic: '扩展概念',
     prerequisiteIds: ['init-submodules'],
-    estimatedMinutes: 5,
+    estimatedMinutes: 6,
     nextTaskId: 'list-worktree',
-    successMessage: '你已经理解了 worktree add 的使用方式。',
-    conceptNote:
-      '这是概念练习，本轮不提供图形模拟，也不会计入完成进度。',
-    instructions: ['理解 worktree 能让你在多个目录同时工作，而不必反复切换分支。'],
-    hints: [
-      'worktree 很适合处理 hotfix 或并行验证多个版本。',
-      '新目录会共享同一个仓库历史。',
+    successMessage: '🎉 你已经会在同一个仓库里同时挂起两个工作目录了。',
+    contextNote:
+      '你正在开发 feature，线上突然要紧急修复。与其切分支，不如把 hotfix 分支挂到一个新目录里单独处理。',
+    terminalIntro: '任务：为 hotfix 分支添加一个工作树，然后确认列表。',
+    createInitialState: () => {
+      let state = createInitialState();
+      state = executeCommand(state, 'git branch hotfix').state;
+      return state;
+    },
+    steps: [
+      {
+        instruction: '把 hotfix 分支检出到新目录 ../hotfix。',
+        acceptedCommands: ['git worktree add ../hotfix hotfix'],
+        hint: '使用 git worktree add <路径> <分支>。',
+        validate: ({ nextState }) =>
+          nextState.worktrees.length === 1 &&
+          nextState.worktrees[0].branch === 'hotfix',
+      },
+      {
+        instruction: '查看所有工作树，确认主工作树和新建的都在。',
+        acceptedCommands: ['git worktree list'],
+        hint: '使用 git worktree list。',
+        validate: ({ result }) =>
+          result.ok &&
+          result.output.includes('hotfix') &&
+          result.output.split('\n').length >= 2,
+      },
     ],
-    referenceCommands: ['git worktree add ../hotfix hotfix-branch'],
   },
   {
     id: 'list-worktree',
-    mode: 'conceptual',
-    title: '查看工作树',
-    description: '理解如何查看当前仓库关联的所有工作树。',
+    mode: 'interactive',
+    title: '管理与清理工作树',
+    description: '用完的工作树要及时清理，体验完整生命周期。',
     difficulty: '高级',
     topic: '扩展概念',
     prerequisiteIds: ['add-worktree'],
-    estimatedMinutes: 4,
+    estimatedMinutes: 5,
+    nextTaskId: 'rebase-i-cleanup',
+    successMessage: '🎉 从挂起到清理，工作树的生命周期你已经走通了。',
+    contextNote:
+      '紧急修复完成，hotfix 分支已经合并回 main，挂载的工作树该清掉了。',
+    terminalIntro: '任务：确认工作树列表，然后删除已经用完的 ../hotfix。',
+    createInitialState: () => {
+      let state = createInitialState();
+      state = executeCommand(state, 'git branch hotfix').state;
+      state = executeCommand(state, 'git worktree add ../hotfix hotfix').state;
+      return state;
+    },
+    steps: [
+      {
+        instruction: '查看当前所有工作树。',
+        acceptedCommands: ['git worktree list'],
+        hint: '使用 git worktree list。',
+        validate: ({ result }) =>
+          result.ok && result.output.includes('../hotfix'),
+      },
+      {
+        instruction: '删除已用完的 ../hotfix 工作树。',
+        acceptedCommands: ['git worktree remove ../hotfix'],
+        hint: '使用 git worktree remove <路径>。',
+        validate: ({ nextState }) => nextState.worktrees.length === 0,
+      },
+    ],
+  },
+  {
+    id: 'rebase-i-cleanup',
+    mode: 'interactive',
+    title: '交互式变基：清理琐碎提交',
+    description: '用 rebase -i 把 "wip" 琐碎提交从历史中清理掉，体验真正的历史整理。',
+    difficulty: '高级',
+    topic: '扩展概念',
+    prerequisiteIds: ['list-worktree'],
+    estimatedMinutes: 10,
     nextTaskId: 'rebase-exec',
-    successMessage: '你已经理解了查看工作树列表的命令。',
-    conceptNote:
-      '这是概念练习，本轮不提供图形模拟，也不会计入完成进度。',
-    instructions: ['查看当前仓库所有 worktree 的挂载情况。'],
-    hints: ['worktree list 会列出路径、分支和 HEAD 状态。'],
-    referenceCommands: ['git worktree list'],
+    successMessage: '🎉 你刚刚完成了真实开发中最有成就感的操作——把一团糟的提交历史整理成干净的三个提交。',
+    contextNote:
+      '你连续提交了三个历史：一个正经功能、一个 wip 草稿、一个验证修复。发 PR 之前，把 wip 清理掉。',
+    terminalIntro: '任务：进入交互式变基，把 wip 提交 drop 掉，应用清单。',
+    createInitialState: () => {
+      let state = createInitialState({ staging: true });
+      state = executeCommand(state, 'git commit -m "feat: login form"').state;
+      state = { ...state, staging: true };
+      state = executeCommand(state, 'git commit -m "wip: debug attempt"').state;
+      state = { ...state, staging: true };
+      state = executeCommand(state, 'git commit -m "feat: validate input"').state;
+      return state;
+    },
+    steps: [
+      {
+        instruction: '对最近 3 个提交发起交互式变基。',
+        acceptedCommands: ['git rebase -i HEAD~3'],
+        hint: '使用 git rebase -i HEAD~3。',
+        validate: ({ nextState }) => nextState.rebaseTodo !== null,
+      },
+      {
+        instruction: '把第 2 项（wip）标记为 drop。',
+        acceptedCommands: ['rebase-todo drop 2'],
+        hint: '使用 rebase-todo drop 2（序号从 1 开始）。',
+        validate: ({ nextState }) =>
+          nextState.rebaseTodo?.[1].action === 'drop',
+      },
+      {
+        instruction: '应用清单，完成变基。',
+        acceptedCommands: ['rebase-todo apply'],
+        hint: '使用 rebase-todo apply。',
+        validate: ({ nextState, result }) => {
+          const headId = nextState.HEAD.startsWith('ref: ')
+            ? nextState.branches.get(nextState.HEAD.slice(5)) ?? null
+            : nextState.HEAD;
+          const head = headId ? nextState.commits.get(headId) : null;
+
+          return (
+            result.ok &&
+            nextState.rebaseTodo === null &&
+            head?.message === 'feat: validate input'
+          );
+        },
+      },
+      {
+        instruction: '用 git log --oneline 确认历史里不再有 wip。',
+        acceptedCommands: ['git log --oneline'],
+        hint: '使用 git log --oneline，观察输出里是否还有 wip 字样。',
+        validate: ({ result }) =>
+          result.ok && !result.output.includes('wip'),
+      },
+    ],
   },
   {
     id: 'rebase-exec',
@@ -1452,13 +1553,14 @@ export const practiceSections: PracticeSection[] = [
   {
     id: 'concept-advanced',
     title: '延伸概念',
-    description: '这些主题暂时保持概念题，等后续多仓库建模再升级为可交互练习。',
+    description: 'worktree 和交互式变基已可动手；submodule/rerere 等仍是概念题。',
     kind: 'concept',
     taskIds: [
-      'add-submodule',
-      'init-submodules',
       'add-worktree',
       'list-worktree',
+      'rebase-i-cleanup',
+      'add-submodule',
+      'init-submodules',
       'rebase-exec',
       'enable-rerere',
       'bisect-intro',

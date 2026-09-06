@@ -152,6 +152,8 @@ export function cloneState(state: GitState): GitState {
     remoteTracking: new Map(state.remoteTracking),
     upstream: new Map(state.upstream),
     tags: new Map(state.tags),
+    worktrees: state.worktrees.map((w) => ({ ...w })),
+    rebaseTodo: state.rebaseTodo ? state.rebaseTodo.map((t) => ({ ...t })) : null,
     mergeConflict: state.mergeConflict ? { ...state.mergeConflict } : null,
   };
 }
@@ -186,6 +188,8 @@ export function createInitialState(
     remoteTracking: new Map(),
     upstream: new Map(),
     tags: new Map(),
+    worktrees: [],
+    rebaseTodo: null,
     mergeConflict: null,
   };
 }
@@ -1016,6 +1020,135 @@ export function executeCommand(state: GitState, input: string): ExecResult {
           `config.js -> ${resolvedValue}`,
           "Merge made by the 'ort' strategy.",
         ].join('\n')
+      );
+    }
+
+    // 本平台的辅助命令（交互式变基的待办清单）
+    if (parts[0] === 'rebase-todo') {
+      if (!state.rebaseTodo) {
+        return invalid(state, '当前没有进行中的交互式变基，先执行 git rebase -i HEAD~<n>。');
+      }
+
+      // rebase-todo <action> <序号>：编辑待办清单项（序号从 1 开始）
+      if (parts[1] !== 'apply' && parts[1] !== 'show') {
+        const actionName = parts[1];
+        const index = Number(parts[2]) - 1;
+        const validActions = ['pick', 'fixup', 'squash', 'drop'];
+
+        if (
+          !validActions.includes(actionName ?? '') ||
+          !Number.isInteger(index) ||
+          index < 0 ||
+          index >= state.rebaseTodo.length
+        ) {
+          return invalid(
+            state,
+            `用法: rebase-todo <pick|fixup|squash|drop> <序号>（序号 1~${state.rebaseTodo.length}），或 rebase-todo apply 应用清单。`
+          );
+        }
+
+        const edited = cloneState(state);
+        edited.rebaseTodo = edited.rebaseTodo!.map((item, i) =>
+          i === index ? { ...item, action: actionName as RebaseTodoItem['action'] } : item
+        );
+
+        return success(
+          edited,
+          [
+            `已将第 ${index + 1} 项改为 ${actionName}。当前清单:`,
+            ...edited.rebaseTodo.map(
+              (t) => `  ${t.action.padEnd(6)} ${t.commitId.slice(0, 7)} ${t.message}`
+            ),
+            '',
+            '继续编辑或执行: rebase-todo apply',
+          ].join('\n')
+        );
+      }
+
+      if (parts[1] === 'show') {
+        return success(
+          state,
+          state.rebaseTodo
+            .map((t) => `${t.action.padEnd(6)} ${t.commitId.slice(0, 7)} ${t.message}`)
+            .join('\n')
+        );
+      }
+
+      // rebase-todo apply：应用待办清单，重放提交
+      const currentBranch = getHeadBranch(state);
+      if (!currentBranch) {
+        return invalid(state, '分离 HEAD 状态下不支持交互式变基。');
+      }
+
+      const headId = getHeadCommit(state);
+      if (!headId) {
+        return invalid(state, '当前 HEAD 无法解析到任何提交。');
+      }
+      // 重放的基底 = 清单里第一个提交的父提交（不是当前 HEAD 的父——
+      // apply 时 HEAD 仍在原始历史顶端，但清单可能只覆盖最近 n 个提交）
+      const firstTodo = state.rebaseTodo[0];
+      const baseCommit =
+        state.commits.get(firstTodo.commitId)?.parents[0] ??
+        state.commits.get(headId)?.parents[0] ??
+        null;
+
+      const plan = state.rebaseTodo;
+      const drops = plan.filter((t) => t.action === 'drop');
+      if (drops.length === plan.length) {
+        return invalid(state, '不能 drop 全部提交，至少保留一个。');
+      }
+
+      const next = cloneState(state);
+      let parent: string | null = baseCommit;
+
+      // 先按序把 pick 链接起来（不含 drop）；fixup/squash 与前面的提交合并
+      const kept = plan.filter((t) => t.action !== 'drop');
+      const mergedCount = kept.length - kept.filter((t) => t.action === 'pick').length;
+
+      for (const item of kept) {
+        const sourceCommit = state.commits.get(item.commitId);
+        const configValue = sourceCommit?.configValue;
+
+        // fixup/squash 简化语义：与前一提交合并 = 沿用前一新提交的消息与内容，
+        // 这里等价于"跳过单独成提交"，但因为消息要保留第一条 pick 的，
+        // 直接在重放时把 fixup/squash 项的消息并入前一项即可。
+        // 实现：pick 新建提交；fixup/squash 不新建。
+        if (item.action === 'pick') {
+          const id = shortId();
+          next.commits.set(id, {
+            id,
+            message: item.message,
+            parents: [parent!],
+            configValue:
+              configValue ?? next.commits.get(parent!)?.configValue ?? 'log_level=info',
+          });
+          parent = id;
+        }
+      }
+
+      next.branches.set(currentBranch, parent!);
+      next.HEAD = `ref: ${currentBranch}`;
+      next.rebaseTodo = null;
+
+      const withReflog = appendReflog(
+        next,
+        `rebase -i (applied ${plan.length - drops.length})`,
+        headId,
+        parent!
+      );
+      const squashed = plan.filter(
+        (t) => t.action === 'fixup' || t.action === 'squash'
+      ).length;
+      const dropped = drops.length;
+      return success(
+        withReflog,
+        [
+          `交互式变基完成：${plan.length - dropped - squashed} 个提交保留`,
+          squashed > 0 ? `${squashed} 个提交被合并` : '',
+          dropped > 0 ? `${dropped} 个提交被删除` : '',
+        ]
+          .filter(Boolean)
+          .join('\n')
       );
     }
 
@@ -1975,9 +2108,282 @@ export function executeCommand(state: GitState, input: string): ExecResult {
     );
   }
 
+  if (parts[1] === 'worktree') {
+    // git worktree list
+    if (parts.length === 3 && parts[2] === 'list') {
+      const lines = [`* ${'/main/worktree'}  ${getHeadBranch(state) ?? '(detached HEAD)'} ${getShortId(getHeadCommit(state))}`];
+      for (const wt of state.worktrees) {
+        lines.push(`  ${wt.path}  ${wt.branch ?? '(detached HEAD)'} ${getShortId(wt.head)}`);
+      }
+      return success(state, lines.join('\n'));
+    }
+
+    // git worktree add <path> <branch> | -b <new> <path> [base]
+    if (parts[2] === 'add' && parts.length >= 5) {
+      let newPath: string;
+      let branchName: string | null = null;
+      let baseRef: string | null = null;
+
+      if (parts[3] === '-b' && parts.length >= 6) {
+        // git worktree add -b <new-branch> <path> [base]
+        branchName = parts[4];
+        newPath = parts[5];
+        baseRef = parts[6] ?? null;
+
+        if (state.branches.has(branchName)) {
+          return invalid(state, `分支 "${branchName}" 已存在。`);
+        }
+      } else {
+        // git worktree add <path> <branch>
+        newPath = parts[3];
+        branchName = parts[4];
+        baseRef = null;
+      }
+
+      if (!branchName) {
+        return invalid(state, '请指定要检出的分支名。');
+      }
+
+      const baseCommit = baseRef
+        ? resolveCommitish(state, baseRef)
+        : getHeadCommit(state);
+      if (!baseCommit) {
+        return invalid(state, baseRef ? `无法找到引用 "${baseRef}"。` : '当前 HEAD 无法解析到任何提交。');
+      }
+
+      if (!state.branches.has(branchName)) {
+        return invalid(state, `分支 "${branchName}" 不存在（沙盒中不支持从 worktree 创建已存在的分支，先 git branch）。`);
+      }
+
+      if (state.worktrees.some((w) => w.path === newPath)) {
+        return invalid(state, `工作树 "${newPath}" 已存在。`);
+      }
+
+      const next = cloneState(state);
+      next.worktrees = [...next.worktrees, { path: newPath, branch: branchName, head: baseCommit }];
+      return success(
+        next,
+        `已在 "${newPath}" 检出分支 "${branchName}"（共享同一仓库历史）。`
+      );
+    }
+
+    // git worktree remove <path>
+    if (parts[2] === 'remove' && parts.length === 4) {
+      const target = parts[3];
+      if (!state.worktrees.some((w) => w.path === target)) {
+        return invalid(state, `工作树 "${target}" 不存在。`);
+      }
+
+      const next = cloneState(state);
+      next.worktrees = next.worktrees.filter((w) => w.path !== target);
+      return success(next, `已删除工作树 "${target}"。`);
+    }
+
+    return invalid(
+      state,
+      '支持: git worktree list / git worktree add <路径> <分支> / git worktree remove <路径>'
+    );
+  }
+
+  // git rebase -i <range>：生成待办清单，等待 rebase-todo 应用
+  if (parts[1] === 'rebase' && parts[2] === '-i' && parts.length >= 4) {
+    const range = parts[3];
+    if (command.includes('--exec')) {
+      return unsupported(state, getUnsupportedMessage(command));
+    }
+
+    const rangeMatch = range.match(/^HEAD~(\d+)$/);
+    if (!rangeMatch) {
+      return invalid(state, '沙盒支持 git rebase -i HEAD~<n> 形式的范围。');
+    }
+
+    const count = Number(rangeMatch[1]);
+    const headId = getHeadCommit(state);
+    if (!headId) {
+      return invalid(state, '当前 HEAD 无法解析到任何提交。');
+    }
+
+    // 收集最近 n 个提交（旧 -> 新）
+    const todos: RebaseTodoItem[] = [];
+    let cursor: string | null = headId;
+    for (let i = 0; i < count && cursor; i++) {
+      const commit = state.commits.get(cursor);
+      if (!commit || commit.parents.length !== 1) {
+        break;
+      }
+      todos.unshift({
+        action: 'pick',
+        commitId: commit.id,
+        message: commit.message,
+      });
+      cursor = commit.parents[0];
+    }
+
+    if (todos.length === 0) {
+      return invalid(state, '没有可以整理的提交。');
+    }
+
+    const next = cloneState(state);
+    next.rebaseTodo = todos;
+    return success(
+      next,
+      [
+        '交互式变基待办清单（提示符模拟）:',
+        ...todos.map(
+          (t, i) => `  pick ${t.commitId.slice(0, 7)} ${t.message}`
+        ),
+        '',
+        '修改某项 action: rebase-todo <pick|fixup|squash|drop> <序号>',
+        '应用清单: rebase-todo apply',
+      ].join('\n')
+    );
+  }
+
+  // rebase-todo <action> <序号>：编辑待办清单项（序号从 1 开始）
+  if (command.startsWith('rebase-todo ') && parts[1] !== 'apply' && parts[1] !== 'show') {
+    if (!state.rebaseTodo) {
+      return invalid(state, '当前没有进行中的交互式变基，先执行 git rebase -i HEAD~<n>。');
+    }
+
+    const actionName = parts[1];
+    const index = Number(parts[2]) - 1;
+    const validActions = ['pick', 'fixup', 'squash', 'drop'];
+
+    if (!validActions.includes(actionName ?? '') || !Number.isInteger(index) || index < 0 || index >= state.rebaseTodo.length) {
+      return invalid(
+        state,
+        `用法: rebase-todo <pick|fixup|squash|drop> <序号>（序号 1~${state.rebaseTodo.length}），或 rebase-todo apply 应用清单。`
+      );
+    }
+
+    const next = cloneState(state);
+    next.rebaseTodo = next.rebaseTodo!.map((item, i) =>
+      i === index ? { ...item, action: actionName as RebaseTodoItem['action'] } : item
+    );
+
+    return success(
+      next,
+      [
+        `已将第 ${index + 1} 项改为 ${actionName}。当前清单:`,
+        ...next.rebaseTodo.map(
+          (t) => `  ${t.action.padEnd(6)} ${t.commitId.slice(0, 7)} ${t.message}`
+        ),
+        '',
+        '继续编辑或执行: rebase-todo apply',
+      ].join('\n')
+    );
+  }
+
+  // rebase-todo apply：应用当前待办清单，重放提交（教学辅助命令）
+  if (command.startsWith('rebase-todo ')) {
+    if (!state.rebaseTodo) {
+      return invalid(state, '当前没有进行中的交互式变基，先执行 git rebase -i HEAD~<n>。');
+    }
+
+    if (parts[1] === 'show') {
+      return success(
+        state,
+        state.rebaseTodo
+          .map((t) => `${t.action.padEnd(6)} ${t.commitId.slice(0, 7)} ${t.message}`)
+          .join('\n')
+      );
+    }
+
+    if (parts[1] !== 'apply') {
+      return invalid(state, '使用 rebase-todo apply 应用清单，或 rebase-todo show 查看。');
+    }
+
+    const currentBranch = getHeadBranch(state);
+    if (!currentBranch) {
+      return invalid(state, '分离 HEAD 状态下不支持交互式变基。');
+    }
+
+    const headId = getHeadCommit(state);
+    if (!headId) {
+      return invalid(state, '当前 HEAD 无法解析到任何提交。');
+    }
+    const baseCommit = state.commits.get(headId)?.parents[0] ?? null;
+
+    // 过滤 drop，按 fixup/squash 合并消息
+    const plan = state.rebaseTodo;
+    const drops = plan.filter((t) => t.action === 'drop');
+    if (drops.length === plan.length) {
+      return invalid(state, '不能 drop 全部提交，至少保留一个。');
+    }
+
+    const next = cloneState(state);
+    let parent = baseCommit;
+    let pendingFixup: { messages: string[]; configValue: string | undefined } | null = null;
+
+    const finalizePending = () => {
+      if (!pendingFixup) return;
+      const id = shortId();
+      next.commits.set(id, {
+        id,
+        message: pendingFixup.messages[0],
+        parents: [parent!],
+        configValue: pendingFixup.configValue,
+      });
+      parent = id;
+      pendingFixup = null;
+    };
+
+    for (const item of plan) {
+      if (item.action === 'drop') {
+        continue;
+      }
+
+      const sourceCommit = state.commits.get(item.commitId);
+      const configValue = sourceCommit?.configValue;
+
+      if (item.action === 'pick') {
+        finalizePending();
+        const id = shortId();
+        next.commits.set(id, {
+          id,
+          message: item.message,
+          parents: [parent!],
+          configValue: configValue ?? next.commits.get(parent!)?.configValue ?? 'log_level=info',
+        });
+        parent = id;
+      } else {
+        // fixup / squash：合并到前一个提交
+        if (!pendingFixup) {
+          // 第一个就是 fixup/squash 且没有前一个可合并 → 降级为 pick
+          pendingFixup = { messages: [item.message], configValue };
+        } else {
+          pendingFixup.messages.push(item.message);
+        }
+      }
+    }
+    finalizePending();
+
+    next.branches.set(currentBranch, parent!);
+    next.HEAD = `ref: ${currentBranch}`;
+    next.rebaseTodo = null;
+
+    const withReflog = appendReflog(
+      next,
+      `rebase -i (applied ${plan.length - drops.length})`,
+      headId,
+      parent!
+    );
+    const squashed = plan.filter((t) => t.action === 'fixup' || t.action === 'squash').length;
+    const dropped = drops.length;
+    return success(
+      withReflog,
+      [
+        `交互式变基完成：${plan.length - dropped - squashed} 个提交保留`,
+        squashed > 0 ? `${squashed} 个提交被合并` : '',
+        dropped > 0 ? `${dropped} 个提交被删除` : '',
+      ]
+        .filter(Boolean)
+        .join('\n')
+    );
+  }
+
   const unsupportedFamilies = new Set([
     'submodule',
-    'worktree',
     'config',
   ]);
 
