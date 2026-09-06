@@ -30,6 +30,8 @@ export interface PracticeStep {
   instruction: string;
   acceptedCommands: string[];
   hint: string;
+  /** 答错时的针对性教学说明：这步在练什么、为什么容易错 */
+  teachNote?: string;
   validate: (context: PracticeValidationContext) => boolean;
 }
 
@@ -85,6 +87,8 @@ export interface EvaluatePracticeResult {
   completed: boolean;
   nextStepIndex: number;
   feedback: string;
+  /** 答错时附带的教学说明（teachNote），UI 可渲染为教学卡片 */
+  teaching?: string;
   /** 虚拟队友在此步之后触发推送（ PracticeTaskPage 需据此更新远程状态） */
   teammatePushMessage?: string;
 }
@@ -225,6 +229,7 @@ export function evaluateInteractivePracticeCommand(
       completed: false,
       nextStepIndex: stepIndex,
       feedback: `命令不正确。提示：${step.hint}`,
+      teaching: step.teachNote,
     };
   }
 
@@ -268,6 +273,7 @@ export function evaluateInteractivePracticeCommand(
       completed: false,
       nextStepIndex: stepIndex,
       feedback: result.output,
+      teaching: step.teachNote,
     };
   }
 
@@ -276,6 +282,7 @@ export function evaluateInteractivePracticeCommand(
     completed: false,
     nextStepIndex: stepIndex,
     feedback: `这条命令执行了，但仓库状态还没有达到本步骤目标。提示：${step.hint}`,
+    teaching: step.teachNote,
   };
 }
 
@@ -478,6 +485,8 @@ export const practiceTasks: PracticeTask[] = [
         instruction: '创建名为 feature 的新分支。',
         acceptedCommands: ['git branch feature'],
         hint: '先用 git branch feature 创建分支。',
+        teachNote:
+          'git branch 只创建分支，不会切换过去——分支本质是一个指向当前提交的可移动标签。创建后 HEAD 仍留在原分支，这是新手最常见的误解。想一步到位要用 git checkout -b 或 git switch -c。',
         validate: ({ nextState }) =>
           nextState.branches.has('feature') &&
           getHeadBranch(nextState) === 'main',
@@ -523,6 +532,8 @@ export const practiceTasks: PracticeTask[] = [
         instruction: '把 feature 分支合并到 main。',
         acceptedCommands: ['git merge feature'],
         hint: '使用 git merge feature。',
+        teachNote:
+          '合并的方向感：merge 语义是"把指定分支合进我当前所在的分支"，所以必须先站在 main 上。方向搞反（在 feature 上 merge main）不会报错，但结果完全不同——会把 main 的工作带进 feature 而不是相反。',
         validate: ({ previousState, nextState }) => {
           const previousHead = getHeadCommit(previousState);
           const nextHeadId = getHeadCommit(nextState);
@@ -582,6 +593,8 @@ export const practiceTasks: PracticeTask[] = [
         instruction: '查看冲突内容：不带参数执行 resolve-conflict。',
         acceptedCommands: ['resolve-conflict'],
         hint: '输入 resolve-conflict 可以看到 <<<<<<< ======= >>>>>>> 标记的双方内容。',
+        teachNote:
+          '冲突标记读法：<<<<<<< 到 ======= 之间是当前分支（HEAD）的版本，======= 到 >>>>>>> 之间是对方分支的版本。真实的解决常常不是二选一，而是把两边有价值的部分融合成第三种写法——沙盒用 ours/theirs/both 简化了这个决策。',
         validate: ({ result }) =>
           !result.ok &&
           result.output.includes('<<<<<<<') &&
@@ -636,6 +649,8 @@ export const practiceTasks: PracticeTask[] = [
         instruction: '创建并切换到新分支 feature。',
         acceptedCommands: ['git checkout -b feature'],
         hint: '使用 git checkout -b feature，一步创建并切换。',
+        teachNote:
+          '-b 是 branch 的缩写：先创建分支再切换过去。如果你刚才单独用过 git branch + git checkout 两步，那条路径也完全正确——这里练习的是一步写法。新语法 git switch -c 是等价的现代替代。',
         validate: ({ nextState }) => getHeadBranch(nextState) === 'feature',
       },
       {
@@ -651,6 +666,8 @@ export const practiceTasks: PracticeTask[] = [
         instruction: '把 feature 推送到远程，并建立跟踪关系。',
         acceptedCommands: ['git push -u origin feature'],
         hint: '首次推送使用 git push -u origin feature，-u 会建立跟踪关系。',
+        teachNote:
+          '本地新建的分支对远程来说是全新的，第一次推送必须明确"推到哪个远程的哪个分支"。 -u（--set-upstream）建立本地分支与远程分支的绑定，之后 git status 才能告诉你领先/落后几个提交，裸敲 git push 也知道推往哪里。',
         validate: ({ nextState }) => {
           const headId = getHeadCommit(nextState);
           return (
@@ -743,6 +760,8 @@ export const practiceTasks: PracticeTask[] = [
         instruction: '直接尝试推送 main，观察 Git 的拒绝信息（这一步的失败是预期内的）。',
         acceptedCommands: ['git push origin main'],
         hint: '执行 git push origin main，注意输出里的 non-fast-forward。',
+        teachNote:
+          'non-fast-forward 意味着"直接接受你的推送会覆盖远程上你还没有的提交"——Git 用拒绝来保护队友的工作。它不是报错，是护栏。正确反应永远不是 --force 强推，而是先 fetch 看清远程状态。',
         validate: ({ result }) =>
           !result.ok && result.output.includes('non-fast-forward'),
       },
@@ -869,6 +888,8 @@ export const practiceTasks: PracticeTask[] = [
         instruction: '撤销最近一次提交，但保留改动在暂存区。',
         acceptedCommands: ['git reset --soft HEAD~1'],
         hint: '使用 git reset --soft HEAD~1。',
+        teachNote:
+          'HEAD~1 读作"HEAD 的上一个提交"。--soft 表示只把分支指针往回挪一格，你的改动原封不动留在暂存区——相当于"把这一次提交拆开重写"。用 --hard 的话改动会一并消失，那是这道题特意避开的选项。',
         validate: ({ previousState, nextState }) =>
           getHeadCommit(previousState) !== getHeadCommit(nextState) &&
           nextState.staging,

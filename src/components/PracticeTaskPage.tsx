@@ -39,6 +39,8 @@ export default function PracticeTaskPage({ id }: PracticeTaskPageProps) {
   const [showHints, setShowHints] = useState(false);
   const [showAnswers, setShowAnswers] = useState(false);
   const [resetKey, setResetKey] = useState(0);
+  /** 最近一次答错时的教学卡片内容（答对后清除） */
+  const [lastTeaching, setLastTeaching] = useState<string | null>(null);
   const [gitState, setGitState] = useState<GitState>(() =>
     task && isInteractiveTask(task) ? task.createInitialState() : createInitialState()
   );
@@ -71,6 +73,7 @@ export default function PracticeTaskPage({ id }: PracticeTaskPageProps) {
     setCurrentStep(0);
     setShowHints(false);
     setShowAnswers(false);
+    setLastTeaching(null);
     setGitState(task.createInitialState());
     setResetKey((value) => value + 1);
   }, [id, task]);
@@ -122,6 +125,9 @@ export default function PracticeTaskPage({ id }: PracticeTaskPageProps) {
 
       if (evaluation.advanced) {
         setCurrentStep(evaluation.nextStepIndex);
+        setLastTeaching(null);
+      } else if (evaluation.teaching) {
+        setLastTeaching(evaluation.teaching);
       }
 
       if (evaluation.completed) {
@@ -146,6 +152,7 @@ export default function PracticeTaskPage({ id }: PracticeTaskPageProps) {
     setCurrentStep(0);
     setShowHints(false);
     setShowAnswers(false);
+    setLastTeaching(null);
     setGitState(task.createInitialState());
     setResetKey((value) => value + 1);
   }, [task]);
@@ -263,6 +270,17 @@ export default function PracticeTaskPage({ id }: PracticeTaskPageProps) {
                       </li>
                     ))}
                   </ul>
+
+                  {interactive && lastTeaching && !completed && (
+                    <div className="mt-4 rounded-lg border border-sky-200 bg-sky-50 p-4 text-sm dark:border-sky-800 dark:bg-sky-900/20">
+                      <div className="mb-1 font-semibold text-sky-800 dark:text-sky-200">
+                        💡 为什么这一步容易错
+                      </div>
+                      <div className="leading-6 text-sky-800 dark:text-sky-200">
+                        {lastTeaching}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {prerequisites.length > 0 && (
