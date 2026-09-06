@@ -41,6 +41,7 @@ export interface GitState {
   remote: RemoteRepo | null;
   remoteTracking: Map<string, string>; // "origin/<branch>" -> 本地图中的提交 id
   upstream: Map<string, string>; // "<branch>" -> "origin/<branch>"
+  tags: Map<string, string>; // tag 名 -> 提交 id
   mergeConflict: MergeConflict | null; // 冲突进行中（等待 resolve-conflict）
 }
 
@@ -136,6 +137,7 @@ export function cloneState(state: GitState): GitState {
       : null,
     remoteTracking: new Map(state.remoteTracking),
     upstream: new Map(state.upstream),
+    tags: new Map(state.tags),
     mergeConflict: state.mergeConflict ? { ...state.mergeConflict } : null,
   };
 }
@@ -169,6 +171,7 @@ export function createInitialState(
     remote: null,
     remoteTracking: new Map(),
     upstream: new Map(),
+    tags: new Map(),
     mergeConflict: null,
   };
 }
@@ -1083,6 +1086,43 @@ export function executeCommand(state: GitState, input: string): ExecResult {
       return invalid(state, '请使用 git commit -m "提交信息" 提交。');
     }
 
+    // --amend: 修补最近一次提交（替换 HEAD，保留父链）
+    if (command.includes('--amend')) {
+      const headId = getHeadCommit(state);
+      if (!headId) {
+        return invalid(state, '当前 HEAD 无法解析到任何提交。');
+      }
+      const headCommit = state.commits.get(headId);
+      if (!headCommit || headCommit.parents.length === 0) {
+        return invalid(state, '初始提交不能 amend，请直接重新提交。');
+      }
+
+      const configMatch = command.match(/config=("([^"]+)"|'([^']+)')/);
+      const amendConfig = configMatch?.[2] ?? configMatch?.[3];
+
+      const id = shortId();
+      const next = cloneState(state);
+      next.commits.set(id, {
+        id,
+        message,
+        parents: headCommit.parents,
+        configValue: amendConfig ?? headCommit.configValue ?? 'log_level=info',
+      });
+
+      const branch = getHeadBranch(next);
+      if (branch) {
+        next.branches.set(branch, id);
+        next.HEAD = `ref: ${branch}`;
+      } else {
+        next.HEAD = id;
+      }
+      next.staging = false;
+      next.workingTreeDirty = false;
+
+      const withReflog = appendReflog(next, `commit (amend): ${message}`, headId, id);
+      return success(withReflog, `[${branch || 'detached'} ${id.slice(0, 7)}] ${message}`);
+    }
+
     // config=参数模拟"修改 config.js 的内容"（冲突模拟用）
     const configMatch = command.match(/config=("([^"]+)"|'([^']+)')/);
     const configValue =
@@ -1094,6 +1134,27 @@ export function executeCommand(state: GitState, input: string): ExecResult {
       `commit: ${message}`,
       configValue
     );
+  }
+
+  if (parts[1] === 'restore' && parts.length >= 3) {
+    const isStaged = parts.includes('--staged');
+
+    if (isStaged) {
+      if (!state.staging) {
+        return invalid(state, '暂存区没有可以取消的改动。');
+      }
+      const next = cloneState(state);
+      next.staging = false;
+      next.workingTreeDirty = true;
+      return success(next, `已将 ${parts[3] ?? '文件'} 移出暂存区，改动保留在工作区。`);
+    }
+
+    if (!state.workingTreeDirty) {
+      return invalid(state, '工作区没有可以丢弃的改动。');
+    }
+    const next = cloneState(state);
+    next.workingTreeDirty = false;
+    return success(next, `已丢弃 ${parts[2] ?? '文件'} 的工作区改动。`);
   }
 
   if (parts[1] === 'status' && (parts.length === 2 || parts[2] === '-s' || parts[2] === '--short')) {
@@ -1180,6 +1241,82 @@ export function executeCommand(state: GitState, input: string): ExecResult {
     return success(next, `已删除分支 "${name}"。`);
   }
 
+  if (parts[1] === 'branch' && parts[2] === '-D' && parts.length === 4) {
+    const name = parts[3];
+    if (!state.branches.has(name)) {
+      return invalid(state, `分支 "${name}" 不存在。`);
+    }
+
+    if (getHeadBranch(state) === name) {
+      return invalid(state, '不能删除当前所在分支。');
+    }
+
+    const next = cloneState(state);
+    next.branches.delete(name);
+    return success(next, `已强制删除分支 "${name}"（未合并的提交仍可通过 reflog 找回）。`);
+  }
+
+  if (parts[1] === 'branch' && parts[2] === '-m' && parts.length === 5) {
+    const oldName = parts[3];
+    const newName = parts[4];
+
+    if (!state.branches.has(oldName)) {
+      return invalid(state, `分支 "${oldName}" 不存在。`);
+    }
+    if (state.branches.has(newName)) {
+      return invalid(state, `分支 "${newName}" 已存在。`);
+    }
+
+    const next = cloneState(state);
+    const commitId = next.branches.get(oldName)!;
+    next.branches.delete(oldName);
+    next.branches.set(newName, commitId);
+    if (next.HEAD === `ref: ${oldName}`) {
+      next.HEAD = `ref: ${newName}`;
+    }
+    return success(next, `已将分支 "${oldName}" 重命名为 "${newName}"。`);
+  }
+
+  if (parts[1] === 'tag') {
+    if (parts.length === 2) {
+      // 列出所有 tag（按字母序）
+      const lines = Array.from(state.tags.keys()).sort();
+      return success(state, lines.length > 0 ? lines.join('\n') : '（当前没有任何 tag）');
+    }
+
+    const name = parts[2];
+    if (!/^[vV]?\d[\w.-]*$/.test(name) && !/^[\w.-]+$/.test(name)) {
+      return invalid(state, `非法的 tag 名称 "${name}"。`);
+    }
+
+    if (parts[2] === '-d' && parts.length === 4) {
+      const target = parts[3];
+      if (!state.tags.has(target)) {
+        return invalid(state, `tag "${target}" 不存在。`);
+      }
+      const next = cloneState(state);
+      next.tags.delete(target);
+      return success(next, `已删除 tag "${target}"。`);
+    }
+
+    if (parts.length === 3) {
+      if (state.tags.has(name)) {
+        return invalid(state, `tag "${name}" 已存在。`);
+      }
+
+      const headId = getHeadCommit(state);
+      if (!headId) {
+        return invalid(state, '当前 HEAD 无法解析到任何提交。');
+      }
+
+      const next = cloneState(state);
+      next.tags.set(name, headId);
+      return success(next, `已在提交 ${headId.slice(0, 7)} 上创建 tag "${name}"。`);
+    }
+
+    return invalid(state, '请使用 git tag <名称> 创建，或 git tag 查看列表。');
+  }
+
   if (parts[1] === 'checkout' && parts[2] === '-b' && parts.length === 4) {
     const name = parts[3];
     if (state.branches.has(name)) {
@@ -1226,6 +1363,37 @@ export function executeCommand(state: GitState, input: string): ExecResult {
       headId
     );
     return success(withReflog, `已创建并切换到新分支 "${name}"。`);
+  }
+
+  // git switch - : 回到上一个分支（由 reflog 推断）
+  if (parts[1] === 'switch' && parts[2] === '-' && parts.length === 3) {
+    const previousCommit = getHeadCommit(state);
+    if (!previousCommit) {
+      return invalid(state, '当前 HEAD 无法解析到任何提交。');
+    }
+
+    // 倒数第二次 switch 的目标分支就是"上一个分支"
+    const previousTarget = state.reflog
+      .filter((entry) => entry.action.startsWith('switch:'))
+      .map((entry) => entry.action.split('-> ')[1])
+      .filter((name) => name && name !== getHeadLabel(state))
+      .find((name) => state.branches.has(name));
+
+    if (!previousTarget) {
+      return invalid(state, '找不到上一个分支（当前会话中没有可用的 switch 记录）。');
+    }
+
+    const targetCommit = state.branches.get(previousTarget)!;
+    const next = cloneState(state);
+    next.HEAD = `ref: ${previousTarget}`;
+
+    const withReflog = appendReflog(
+      next,
+      `switch: ${getHeadLabel(state)} -> ${previousTarget}`,
+      previousCommit,
+      targetCommit
+    );
+    return success(withReflog, `已切换到分支 "${previousTarget}"（上一个分支）。`);
   }
 
   if (parts[1] === 'switch' && parts.length === 3) {
