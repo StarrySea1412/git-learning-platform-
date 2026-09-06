@@ -45,6 +45,36 @@ export const achievements: Achievement[] = [
     icon: '🧭',
   },
   {
+    id: 'conflict-slayer',
+    title: '冲突终结者',
+    description: '亲手解决一次合并冲突',
+    icon: '⚔️',
+  },
+  {
+    id: 'git-detective',
+    title: 'Git 侦探',
+    description: '用 bisect 定位出引入 bug 的提交',
+    icon: '🔍',
+  },
+  {
+    id: 'multi-repo-manager',
+    title: '多仓库管家',
+    description: '把外部仓库作为子模块纳入项目',
+    icon: '📦',
+  },
+  {
+    id: 'history-surgeon',
+    title: '历史外科医生',
+    description: '用交互式变基清理琐碎提交',
+    icon: '🩺',
+  },
+  {
+    id: 'remote-pilot',
+    title: '远程领航员',
+    description: '完成推送被拒后的自救练习',
+    icon: '🛰️',
+  },
+  {
     id: 'beginner-done',
     title: '入门毕业',
     description: '完成所有可交互的入门练习',
@@ -144,6 +174,11 @@ export function checkNewAchievements(
     ['first-branch', () => completedTaskIds.has('create-branch')],
     ['first-merge', () => completedTaskIds.has('merge-branch')],
     ['first-rebase', () => completedTaskIds.has('rebase-branch')],
+    ['conflict-slayer', () => completedTaskIds.has('resolve-merge-conflict')],
+    ['git-detective', () => completedTaskIds.has('bisect-hunt')],
+    ['multi-repo-manager', () => completedTaskIds.has('add-submodule')],
+    ['history-surgeon', () => completedTaskIds.has('rebase-i-cleanup')],
+    ['remote-pilot', () => completedTaskIds.has('push-rejected-recovery')],
     ['beginner-done', () => hasCompletedAll(completedTaskIds, beginnerInteractiveIds)],
     [
       'intermediate-done',

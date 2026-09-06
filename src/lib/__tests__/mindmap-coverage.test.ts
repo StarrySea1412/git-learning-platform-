@@ -18,10 +18,10 @@ describe('思维导图命令覆盖', () => {
     ['git switch main', 'ok'],
     ['git init /path/to/project', 'ok'],
     // config 现已支持（rerere.enabled 开关与基础键读写）
-    ['git config --global user.name x', 'ok'],
+    ['git config --global user.name x', 'ok' as const],
     // clone 现已支持：会真正建立远程跟踪
-    ['git clone https://github.com/user/repo.git', 'ok'],
-  ] as const)('%s', (command, expected) => {
+    ['git clone https://github.com/user/repo.git', 'ok' as const],
+  ] as ReadonlyArray<[string, 'ok' | 'unsupported']>)('%s', (command, expected) => {
     const result = executeCommand(createInitialState(), command);
 
     if (expected === 'unsupported') {
