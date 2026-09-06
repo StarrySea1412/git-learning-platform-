@@ -1344,48 +1344,84 @@ export const practiceTasks: PracticeTask[] = [
   },
   {
     id: 'add-submodule',
-    mode: 'conceptual',
+    mode: 'interactive',
     title: '添加子模块',
-    description: '理解如何把外部仓库作为子模块纳入项目。',
+    description: '把外部仓库作为子模块纳入项目，体验多仓库协作的第一步。',
     difficulty: '高级',
     topic: '扩展概念',
     prerequisiteIds: ['detached-head-rescue'],
-    estimatedMinutes: 6,
+    estimatedMinutes: 8,
     nextTaskId: 'init-submodules',
-    successMessage: '你已经理解了 submodule add 的命令结构。',
-    conceptNote:
-      '这是概念练习，本轮不提供图形模拟，也不会计入完成进度。',
-    instructions: ['理解子模块会把一个仓库嵌入到另一个仓库中。'],
-    hints: [
-      '子模块默认记录的是特定提交，而不是始终追踪分支头部。',
-      '添加后会生成 .gitmodules 配置文件。',
-    ],
-    referenceCommands: [
-      'git submodule add https://github.com/lib/lib.git vendor/lib',
+    successMessage: '🎉 你已经把外部仓库嵌入到项目里了——子模块默认记录特定提交，不追踪分支头部。',
+    contextNote:
+      '项目需要一个第三方工具库，你决定用子模块把它嵌入 vendor/lib 目录，而不是复制代码。',
+    terminalIntro: '任务：把外部库添加为子模块，然后查看子模块状态。',
+    createInitialState: () => createInitialState(),
+    steps: [
+      {
+        instruction: '把 https://github.com/lib/lib.git 添加为子模块，路径 vendor/lib。',
+        acceptedCommands: ['git submodule add https://github.com/lib/lib.git vendor/lib'],
+        hint: '使用 git submodule add <url> <路径>。',
+        teachNote:
+          '子模块是"仓库里的仓库"：主仓库只记录子模块指向的提交版本，不记录它的内容。这正是为什么添加后会生成 .gitmodules——它告诉克隆者"去哪拉这个子仓库"。',
+        validate: ({ nextState }) =>
+          nextState.submodules.length === 1 &&
+          nextState.submodules[0].path === 'vendor/lib' &&
+          nextState.submodules[0].initialized,
+      },
+      {
+        instruction: '查看子模块状态。',
+        acceptedCommands: ['git submodule status', 'git submodule'],
+        hint: '使用 git submodule status 或裸 git submodule。',
+        validate: ({ result }) =>
+          result.ok && result.output.includes('vendor/lib'),
+      },
     ],
   },
   {
     id: 'init-submodules',
-    mode: 'conceptual',
+    mode: 'interactive',
     title: '初始化子模块',
-    description: '理解 clone 后如何初始化并更新子模块。',
+    description: 'clone 含子模块的项目后，用 init + update 把子模块内容拉起来。',
     difficulty: '高级',
     topic: '扩展概念',
     prerequisiteIds: ['add-submodule'],
-    estimatedMinutes: 5,
+    estimatedMinutes: 8,
     nextTaskId: 'add-worktree',
-    successMessage: '你已经理解了子模块初始化的基本命令。',
-    conceptNote:
-      '这是概念练习，本轮不提供图形模拟，也不会计入完成进度。',
-    instructions: ['掌握 clone 后拉起子模块内容所需的两个核心命令。'],
-    hints: [
-      '常见做法是先 init，再 update。',
-      '也可以用 update --init 一步完成。',
-    ],
-    referenceCommands: [
-      'git submodule init',
-      'git submodule update',
-      'git submodule update --init',
+    successMessage: '🎉 init 注册、update 拉内容——克隆含子模块项目的标准两步你已经掌握。',
+    contextNote:
+      '你克隆了一个含子模块的项目，但子模块目录是空的（clone 默认不拉子模块）。现在把它拉起来。',
+    terminalIntro: '任务：先 init 注册子模块，再 update 检出内容。试试跳过 init 直接 update 会怎样。',
+    createInitialState: () => {
+      const base = createInitialState();
+      return {
+        ...base,
+        submodules: [
+          { path: 'vendor/lib', url: 'https://github.com/lib/lib.git', initialized: false },
+        ],
+      };
+    },
+    steps: [
+      {
+        instruction: '先试试直接 git submodule update，观察会发生什么。',
+        acceptedCommands: ['git submodule update'],
+        hint: '直接执行 git submodule update，注意它的报错。',
+        validate: ({ result }) =>
+          !result.ok && result.output.includes('init'),
+      },
+      {
+        instruction: '注册子模块到本地配置。',
+        acceptedCommands: ['git submodule init'],
+        hint: '使用 git submodule init。',
+        validate: ({ nextState }) =>
+          nextState.submodules.every((m) => m.initialized),
+      },
+      {
+        instruction: '再次 update，把子模块检出到记录的提交版本。',
+        acceptedCommands: ['git submodule update'],
+        hint: '再执行 git submodule update。',
+        validate: ({ result }) => result.ok && result.output.includes('检出'),
+      },
     ],
   },
   {
@@ -1736,15 +1772,15 @@ export const practiceSections: PracticeSection[] = [
   {
     id: 'concept-advanced',
     title: '延伸概念',
-    description: 'worktree、交互式变基和 bisect 已可动手；submodule/rerere 仍是概念题。',
+    description: 'worktree、交互式变基、bisect、submodule 均已可动手；仅 rerere/exec 还是概念题。',
     kind: 'concept',
     taskIds: [
       'rebase-i-cleanup',
       'bisect-hunt',
-      'add-worktree',
-      'list-worktree',
       'add-submodule',
       'init-submodules',
+      'add-worktree',
+      'list-worktree',
       'rebase-exec',
       'enable-rerere',
     ],

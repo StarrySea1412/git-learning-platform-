@@ -49,6 +49,12 @@ export interface BisectState {
   foundId: string | null;
 }
 
+export interface SubmoduleEntry {
+  path: string;
+  url: string;
+  initialized: boolean;
+}
+
 export interface GitState {
   commits: Map<string, GitCommit>;
   branches: Map<string, string>;
@@ -68,6 +74,7 @@ export interface GitState {
   worktrees: WorktreeEntry[]; // 关联的工作树（主工作树之外的）
   rebaseTodo: RebaseTodoItem[] | null; // 交互式变基的待办清单（编辑中）
   bisect: BisectState | null; // 二分查找进行中
+  submodules: SubmoduleEntry[]; // 子模块（教学模拟）
   mergeConflict: MergeConflict | null; // 冲突进行中（等待 resolve-conflict）
 }
 
@@ -167,6 +174,7 @@ export function cloneState(state: GitState): GitState {
     worktrees: state.worktrees.map((w) => ({ ...w })),
     rebaseTodo: state.rebaseTodo ? state.rebaseTodo.map((t) => ({ ...t })) : null,
     bisect: state.bisect ? { ...state.bisect, log: [...state.bisect.log] } : null,
+    submodules: state.submodules.map((m) => ({ ...m })),
     mergeConflict: state.mergeConflict ? { ...state.mergeConflict } : null,
   };
 }
@@ -204,6 +212,7 @@ export function createInitialState(
     worktrees: [],
     rebaseTodo: null,
     bisect: null,
+    submodules: [],
     mergeConflict: null,
   };
 }
@@ -2557,8 +2566,77 @@ export function executeCommand(state: GitState, input: string): ExecResult {
     );
   }
 
+  // git submodule：多仓库教学模拟（子仓用虚拟仓库表示，非真实递归克隆）
+  if (parts[1] === 'submodule') {
+    const sub = parts[2];
+
+    // git submodule add <url> <path>
+    if (sub === 'add' && parts.length >= 5) {
+      const url = parts[3];
+      const subPath = parts[4];
+
+      if (state.submodules.some((m) => m.path === subPath)) {
+        return invalid(state, `子模块 "${subPath}" 已存在。`);
+      }
+
+      const next = cloneState(state);
+      next.submodules = [...next.submodules, { path: subPath, url, initialized: true }];
+      return success(
+        next,
+        [
+          `Cloning into '${subPath}'...`,
+          `已添加子模块 "${subPath}" -> ${url}`,
+          `同时生成 .gitmodules 配置文件。`,
+        ].join('\n')
+      );
+    }
+
+    // git submodule init
+    if (sub === 'init' && parts.length === 3) {
+      if (state.submodules.length === 0) {
+        return invalid(state, '当前仓库没有配置任何子模块，先执行 git submodule add。');
+      }
+      if (state.submodules.every((m) => m.initialized)) {
+        return success(state, '所有子模块均已初始化。');
+      }
+      const next = cloneState(state);
+      next.submodules = next.submodules.map((m) => ({ ...m, initialized: true }));
+      return success(next, '已注册 .gitmodules 中的子模块到本地配置。');
+    }
+
+    // git submodule update
+    if (sub === 'update' && parts.length === 3) {
+      if (state.submodules.length === 0) {
+        return invalid(state, '当前仓库没有配置任何子模块。');
+      }
+      const uninitialized = state.submodules.filter((m) => !m.initialized);
+      if (uninitialized.length > 0) {
+        return invalid(
+          state,
+          '有未初始化的子模块，先执行 git submodule init（或 git submodule update --init 一步完成）。'
+        );
+      }
+      return success(state, '已将子模块检出到主仓库记录的提交版本。');
+    }
+
+    // git submodule / git submodule status
+    if (parts.length === 2 || sub === 'status') {
+      if (state.submodules.length === 0) {
+        return success(state, '（当前仓库没有子模块）');
+      }
+      const lines = state.submodules.map(
+        (m) => `${m.initialized ? ' ' : '-'} ${m.path}  ${m.url}`
+      );
+      return success(state, lines.join('\n'));
+    }
+
+    return invalid(
+      state,
+      '支持: git submodule add <url> <path> / init / update / status'
+    );
+  }
+
   const unsupportedFamilies = new Set([
-    'submodule',
     'config',
   ]);
 
