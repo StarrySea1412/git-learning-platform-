@@ -8,6 +8,9 @@ const inter = Inter({ subsets: ["latin"], variable: "--font-inter", display: 'sw
 const notoSansSC = Noto_Sans_SC({ subsets: ["latin"], variable: "--font-noto-sans-sc", weight: ["400", "500", "700"], display: 'swap' });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(
+    process.env.NEXT_PUBLIC_SITE_URL || "https://git-learning-platform.vercel.app"
+  ),
   title: {
     default: "Git 学习平台",
     template: "%s | Git 学习平台",
