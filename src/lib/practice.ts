@@ -1772,6 +1772,151 @@ export const practiceTasks: PracticeTask[] = [
       'git bisect reset',
     ],
   },
+  {
+    id: 'add-p-workflow',
+    mode: 'conceptual',
+    title: '把大杂烩改动拆成干净提交',
+    description: '同一个文件里混着 bug 修复和重构，用 git add -p 逐块挑选、分成两个提交。',
+    difficulty: '进阶',
+    topic: '历史整理',
+    prerequisiteIds: ['git-add'],
+    estimatedMinutes: 6,
+    nextTaskId: 'tag-release',
+    successMessage: '你已经掌握了逐块暂存的思路。',
+    conceptNote: '这是概念练习，不提供图形模拟，也不计入完成进度。',
+    instructions: [
+      '场景：login.js 里同时改了登录 bug 和一组变量重命名，两件事必须分成两个提交。',
+      '运行 git add -p login.js 进入逐块问答：bug 修复的 hunk 按 y 暂存，重构的 hunk 按 n 跳过。',
+      '用 git diff --cached 确认暂存区只包含修复，然后 git commit 提交第一件事。',
+      '再次 git add -p（或 git add login.js）把剩余重构全部暂存，提交第二件事。',
+    ],
+    hints: [
+      'add -p 的核心按键只有五个：y（要）/ n（不要）/ s（把当前块再拆细）/ e（手动编辑）/ q（退出）。',
+      '每一轮提交前都用 git diff --cached 验收暂存区，防止手滑选错块。',
+      '两处改动挤在相邻行连 s 都拆不开时，用 e 手动编辑 hunk，直接删掉不想要的行。',
+    ],
+    referenceCommands: [
+      'git add -p login.js',
+      'git diff --cached',
+      'git commit -m "fix: 修复登录态校验"',
+      'git add login.js',
+      'git commit -m "refactor: 统一变量命名"',
+    ],
+  },
+  {
+    id: 'tag-release',
+    mode: 'interactive',
+    title: '给发布提交打版本标签',
+    description: '发版前给当前提交钉上 v 门牌，发现版本号打错后安全删除重打。',
+    difficulty: '进阶',
+    topic: '提交搬运',
+    prerequisiteIds: ['git-commit'],
+    estimatedMinutes: 6,
+    nextTaskId: 'gitignore-rescue',
+    successMessage: '🎉 你已经掌握发版标签的完整生命周期：打、删、重打、核对。',
+    contextNote: 'hotfix 已经合并进 main，现在要把这次修复标记为正式版本。',
+    terminalIntro: '任务：给当前提交打上版本标签 v1.0.0。',
+    createInitialState: () =>
+      createScenarioState([
+        'git commit --allow-empty -m "fix: 修复导出报告崩溃，准备发版"',
+        'git commit --allow-empty -m "chore: 更新版本号到 1.1.0"',
+      ]),
+    steps: [
+      {
+        instruction: '给当前提交打上标签 v1.0.0。',
+        acceptedCommands: ['git tag v1.0.0'],
+        hint: '使用 git tag v1.0.0。',
+        teachNote:
+          'git tag <名字> 会把标签钉在当前 HEAD 指向的提交上。标签和分支不同：它永远不动，新提交再多它也钉在原地。注意 push 不会顺带推标签，想让同事看到要单独 git push origin v1.0.0。',
+        validate: ({ nextState }) => nextState.tags.get('v1.0.0') === getHeadCommit(nextState),
+      },
+      {
+        instruction: '手滑了：这次改动带了新功能，按语义化版本应该发 v1.1.0。先删掉打错的标签。',
+        acceptedCommands: ['git tag -d v1.0.0'],
+        hint: '使用 git tag -d v1.0.0。',
+        teachNote:
+          'git tag -d 只摘"门牌"，不动任何提交——这也是标签没推送前的最大好处：本地随便改，没人知道。已经推送到远端的标签，删除是两步（本地 -d + 把删除推给远端），而且要先确认没人基于它工作。',
+        validate: ({ previousState, nextState }) =>
+          previousState.tags.has('v1.0.0') && !nextState.tags.has('v1.0.0'),
+      },
+      {
+        instruction: '重新打上正确的版本号 v1.1.0。',
+        acceptedCommands: ['git tag v1.1.0'],
+        hint: '使用 git tag v1.1.0。',
+        teachNote:
+          '语义化版本规则：主版本.次版本.修订号——修 bug 升修订号，加功能升次版本，破坏兼容才升主版本。这次带了新功能，升 v1.1.0 没毛病。',
+        validate: ({ nextState }) => nextState.tags.get('v1.1.0') === getHeadCommit(nextState),
+      },
+      {
+        instruction: '列出全部标签，确认门牌都钉对了。',
+        acceptedCommands: ['git tag'],
+        hint: '使用 git tag。',
+        teachNote:
+          'git tag 按字母序列出全部标签。实践中发布前更常用 git show v1.1.0 核对"门牌钉在哪个提交上"，多看一眼总没错。',
+        validate: ({ result }) =>
+          result.ok && result.output.includes('v1.1.0') && !result.output.includes('v1.0.0'),
+      },
+    ],
+  },
+  {
+    id: 'gitignore-rescue',
+    mode: 'conceptual',
+    title: '把误提交的文件请出仓库',
+    description: '.gitignore 对已跟踪的文件不生效——数据库和日志已经进了历史，怎么补救？',
+    difficulty: '进阶',
+    topic: '恢复与切换',
+    prerequisiteIds: ['git-add'],
+    estimatedMinutes: 6,
+    nextTaskId: 'line-endings-rescue',
+    successMessage: '你已经会处理"ignore 了却还在被跟踪"的经典坑。',
+    conceptNote: '这是概念练习，不提供图形模拟，也不计入完成进度。',
+    instructions: [
+      '场景：数据目录里的 app.db（数据库）和 debug.log 被手快 commit 过，现在补了 .gitignore，但 git status 里它们照样出现修改记录。',
+      '原因：.gitignore 只拦截"未跟踪"文件，对已经进仓库的文件无效。',
+      '用 git rm --cached app.db debug.log 把它们移出跟踪——--cached 表示只从索引移除，不删硬盘上的文件。',
+      '提交这次变更，再用 git ls-files 核对跟踪清单，确认它们已不在列表里、.gitignore 开始生效。',
+    ],
+    hints: [
+      '千万不要用不带 --cached 的 git rm——那会把文件从硬盘上一起删掉。',
+      'git rm --cached 之后文件变成"未跟踪"状态，此时 .gitignore 才开始对它生效。',
+      '如果误提交的是密钥、口令这类敏感信息，仅删文件不够——密码要改，历史要清理（git filter-repo 或 BFG）。',
+    ],
+    referenceCommands: [
+      'git rm --cached app.db debug.log',
+      'git commit -m "chore: 停止跟踪本地数据与日志"',
+      'git ls-files',
+    ],
+  },
+  {
+    id: 'line-endings-rescue',
+    mode: 'conceptual',
+    title: '治好 Windows 的 CRLF 警告',
+    description: '每次提交都刷屏 "LF will be replaced by CRLF"？搞懂行尾符与 autocrlf，一次设置终身清净。',
+    difficulty: '入门',
+    topic: '扩展概念',
+    prerequisiteIds: ['git-init'],
+    estimatedMinutes: 5,
+    nextTaskId: null,
+    successMessage: '你已经能看懂并驯服行尾符警告了。',
+    conceptNote: '这是概念练习，不提供图形模拟，也不计入完成进度。',
+    instructions: [
+      '现象：Windows 上每次 add/commit 都刷 "warning: LF will be replaced by CRLF"。这不是错误，而是 Windows(CRLF) 与 Linux/macOS(LF) 行尾符不同的历史遗留。',
+      'Git 的总开关是 core.autocrlf：true = 提交时转 LF、检出时转回 CRLF（Windows 推荐）；input = 提交时转 LF、检出不动（macOS/Linux 推荐）；false = 完全不转换。',
+      '团队策略要统一：在仓库里放 .gitattributes（* text=auto）声明规则，比依赖每个人本机配置可靠得多。',
+      '警告本身无害；真正的坑是团队里一半人 true 一半人 false——同一文件的行尾被来回改写，diff 布满假改动，掩盖真实修改。',
+    ],
+    hints: [
+      '查看当前配置：git config --get core.autocrlf。',
+      '想让 diff 只显示真实差异、不被行尾干扰：git diff --ignore-cr-at-eol。',
+      '仓库里已有文件行尾被搞乱时：git add --renormalize . 一次提交统一规范。',
+    ],
+    referenceCommands: [
+      'git config --global core.autocrlf true',
+      'git config --get core.autocrlf',
+      'git add --renormalize .',
+      'git diff --ignore-cr-at-eol',
+    ],
+  },
 ];
 
 export const practiceSections: PracticeSection[] = [
@@ -1828,6 +1973,13 @@ export const practiceSections: PracticeSection[] = [
       'revert-commit',
       'detached-head-rescue',
     ],
+  },
+  {
+    id: 'lab-release',
+    title: '高级实验室 · 发布与暂存',
+    description: '发布前最容易踩的四个坑：改动拆不开、版本标签、误跟踪文件、行尾符警告。一节实验室全部排掉。',
+    kind: 'lab',
+    taskIds: ['add-p-workflow', 'tag-release', 'gitignore-rescue', 'line-endings-rescue'],
   },
   {
     id: 'concept-advanced',

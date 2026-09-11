@@ -398,6 +398,61 @@ git status -sb`,
     ]
   },
   {
+    id: 'git-tag',
+    title: '标签与发版 (Tag)',
+    description: '给重要提交钉上版本门牌：轻量标签与附注标签、推送标签、语义化版本与 Release',
+    category: 'intermediate',
+    difficulty: '进阶',
+    duration: '12分钟',
+    relatedPracticeIds: ['tag-release'],
+    content: [
+      {
+        title: 'tag 解决什么问题',
+        content: '项目开发到某个节点——"这个版本发给客户了"、"v2.0 上线了"——你希望未来任何时刻都能一键回到这个节点。虽然可以用提交号，但没人记得住 a3f8c21 代表什么。\n\ntag（标签）就是钉在某个提交上的"永久门牌"：v1.0.0 这样的名字，指向一个提交，并且不会随新提交移动。它和分支的区别一句话说清：分支是"一直往前走的书签"，tag 是"钉死在墙上的图钉"。\n\n典型用途：发版时打 tag、标记里程碑、给"线上正在跑的版本"留个指针——出问题时一条命令就能对照那个版本的代码排查。',
+        codeExample: `# 分支 vs 标签:
+#   main:  A --- B --- C --- D ...   （书签：每次提交都往前挪）
+#   v1.0:  └─────┺ 钉在 B 上不动      （图钉：永不动）
+#
+# 常用命令速览
+git tag                    # 列出所有标签
+git tag v1.0.0             # 给当前提交打标签
+git tag -d v1.0.0          # 删除本地标签
+git show v1.0.0            # 查看标签指向的提交详情`,
+        tips: ['tag 名推荐 v 开头的版本号，如 v1.0.0', 'tag 可以打在任何提交上——不只是"最新"的那个']
+      },
+      {
+        title: '轻量标签与附注标签',
+        content: 'Git 有两种标签，区别在于"门牌上写多少信息"：\n\n轻量标签（lightweight）：只是一个指向提交的指针，像"不会移动的分支"——不记录谁打的、什么时候打的。临时个人标记够用。\n\n附注标签（annotated）：一个完整的 Git 对象，存储打标签者、日期、说明信息，还支持 GPG 签名。正式发版一律用附注标签——半年后你会想知道"这个版本谁发的、为什么发"。',
+        codeExample: `# 附注标签：-a 创建，-m 写说明
+git tag -a v1.0.0 -m "首个正式版：核心功能完成"
+
+# 查看附注标签的完整信息（含说明、作者、日期）
+git show v1.0.0
+
+# 轻量标签（不带任何参数）
+git tag v1.0.0-rc1`,
+        tips: ['选型只看一条：要不要"元信息"。要就 -a，不要就裸打', 'git show 对轻量标签只显示提交信息，对附注标签会多显示标签说明']
+      },
+      {
+        title: '推送标签与删除远端标签',
+        content: '关键认知：git push 不会顺手把标签推上去。标签默认只存在于本地——这既是坑（同事看不到你的 v1.0.0），也是保护（打错了删掉重打，没人知道）。推标签必须显式操作。\n\n删除远端标签是两步：先删本地，再把删除"推"过去。标签已经推出去之后就要谨慎删除——如果有人可能已经基于它拉取了代码，删除会造成悬空引用；更稳的姿势是打一个新版本号往前走。',
+        codeExample: `# 推送标签到远端
+git push origin v1.0.0     # 只推这一个
+git push origin --tags     # 推送全部本地标签
+
+# 删除（两步：本地 + 远端）
+git tag -d v1.0.0
+git push origin :refs/tags/v1.0.0   # 把"删除"推给远端`,
+        tips: ['git push --tags 会把本地所有历史遗留标签一次推光，团队仓库建议逐个推', 'git pull 也不会自动拉取别人的新标签，需要 git fetch --tags']
+      },
+      {
+        title: '语义化版本与 Release',
+        content: '版本号怎么编？社区通行的是语义化版本（SemVer）：主版本.次版本.修订号（MAJOR.MINOR.PATCH），如 v2.3.1。规则：修 bug 等不影响使用的改动 → 升修订号；新增功能且向后兼容 → 升次版本；有破坏性变更（老用法会坏）→ 升主版本。\n\n在 GitHub/Gitee 上，tag 还有一个延伸身份：Release。在仓库的 Releases 页基于某个 tag 发布，可以附带更新日志和编译好的文件（比如安装包），用户直接下载——自动发版流程（如 GitHub Actions 的 release 工作流）做的正是这件事。\n\n最后一个衔接：git checkout v1.0.0 会进入 detached HEAD 状态（reflog 那课讲过）——因为 checkout 的是"一个提交"而不是分支。看完代码记得 git switch main 回来。',
+        tips: ['"破坏性变更就升主版本"是团队沟通的契约：看到 v2.0.0 就该预感升级要改代码', 'CI 里常见玩法：推送 v* 标签时触发自动发版流程']
+      }
+    ]
+  },
+  {
     id: 'git-collaboration',
     title: '多人协作',
     description: '学习如何与队友协作开发：Fork、Pull Request、代码审查和推送冲突的处理',
@@ -611,6 +666,63 @@ git stash drop stash@{0}
 # 清空所有暂存
 git stash clear`,
         tips: ['新文件收不进去是最常见的困惑，记住 -u', 'stash branch 适合"收起来后发现工程量不小，值得单开分支"']
+      }
+    ]
+  },
+  {
+    id: 'git-add-p',
+    title: '分块暂存 (add -p)',
+    description: '一坨改动里混着两件事？用 git add -p 逐块挑选，把大杂烩拆成干净的提交',
+    category: 'intermediate',
+    difficulty: '进阶',
+    duration: '15分钟',
+    relatedPracticeIds: ['add-p-workflow'],
+    content: [
+      {
+        title: '问题：一个文件里混着两件事',
+        content: '真实开发里最常见的"违章建筑"：你本来只是想修一个登录 bug，修完顺手把几个变量名也重构了，还调了两处样式。收工时 git status 一看——同一个文件里混着"bug 修复"和"顺手重构"两件不相干的事。\n\n全部塞进一个提交？以后回看历史时"这次提交到底是修 bug 还是改样式"就说不清了；想把 bug 修复单独 cherry-pick 到发版分支也做不到。git add 只能按文件暂存，解决不了"文件内部拆分"。\n\ngit add -p（patch 模式）就是解法：它把改动按"块"（hunk）拆开，逐块问你"这块要暂存吗"，让你在同一份工作区里挑挑拣拣，把两件事分开装进两个提交。',
+        codeExample: `# 场景示意：login.js 同时改了 bug 和重构
+git diff
+#  共 3 处改动：1 块是 bug 修复，2 块是重命名重构
+#
+# 普通 add 只能整文件收：
+git add login.js        # 两件事被迫绑在一起
+#
+# patch 模式逐块收：
+git add -p login.js     # 每一块单独问你要不要`,
+        tips: ['"一个提交只做一件事"是干净历史的底线，add -p 是达成它的主力工具', '以后想单独回滚某次改动时，你会感谢当年拆开的自己']
+      },
+      {
+        title: '逐块问答：y n s e q 五个键',
+        content: 'git add -p 运行后进入逐块问答模式：每个 hunk 显示改动内容，等你按键决定。常用指令只有五个：\n\ny — 要，暂存这一块；n — 不要，跳过（留在工作区）\ns — 拆分：这一块里其实挤着多个不相邻的改动，让 Git 按空行再拆细\nq — 退出（已答过的生效）\ne — 手动编辑：两处改动挤在相邻行、连 s 都拆不开时的保底手段，直接在编辑器里删掉不想要的行\n\n90% 的时间你只在 y/n 之间选择，偶尔用 s，e 是最后手段。',
+        codeExample: `git add -p
+# @@ -12,7 +12,8 @@       <- 一个 hunk（块）
+#  -旧代码行
+#  +新代码行
+# (1/3) Stage this hunk [y,n,q,a,d,s,e]? y
+#
+# 答完所有块后，暂存区里只有你答 y 的部分
+git diff --cached         # 验收：暂存区 == 你挑出来的那部分`,
+        tips: ['括号里的 (1/3) 是进度：共 3 块，正在决定第 1 块', '每一轮结束后先用 git diff --cached 验收，再提交']
+      },
+      {
+        title: '实战：大杂烩拆成两个提交',
+        content: '完整流程串一遍。场景：login.js 里混着 bug 修复和重构。\n\n第一轮：git add -p login.js，bug 修复那块答 y，重构的块答 n——此时暂存区只有修复。git commit -m "fix: 修复登录态校验跳过的问题"，第一件事落袋。\n\n第二轮：再次 git add -p，这次重构块答 y（或干脆 git add login.js，剩下的全是它）。git commit -m "refactor: 统一变量命名"，收工。git log 一看：两个提交，各说各的事。\n\n这套"逐块挑 → 提交 → 再挑 → 再提交"的节奏，同样适用于"代码 + 调试日志混在一起"的场景：把调试 print 那几块答 n 留在工作区，事后再丢弃。',
+        codeExample: `# 第一轮：只暂存 bug 修复
+git add -p login.js       # 修复块按 y，重构块按 n
+git commit -m "fix: 修复登录态校验跳过的问题"
+
+# 第二轮：收尾剩下的重构
+git add login.js
+git commit -m "refactor: 统一变量命名"
+
+git log --oneline         # 两条历史，各自干净`,
+        tips: ['拆完跑一遍测试再 push：正常拆分不改文件内容，但用 e 手动编辑时可能手滑', 'git stash 也支持 -p——"只把一部分改动先收起来"同理可用']
+      },
+      {
+        title: '边界与近亲命令',
+        content: '三条边界要知道：\n\n一，add -p 是纯交互命令，依赖人在终端里按键，脚本和 CI 里用不了。\n\n二，它只解决"提交前的拆分"。如果已经手快把两件事提交在一起了，走另一条路：git reset --soft HEAD~1 撤回提交（改动回到暂存区，reset 那课的技能），必要时再重新 add -p 拆分，分别提交——别怕，reflog 一直兜底。\n\n三，近亲命令一套三件：git add -p 挑着暂存、git restore -p 挑着丢弃工作区改动、git stash -p 挑着收起改动。"挑拣"这个思想可以套在 Git 很多读写操作上。',
+        tips: ['记不住全部没关系，记住"add -p + n 键"就能解决 80% 的混提交问题', '拆已提交的内容 = reset --soft 回来重新拆，这一招和 reflog 课连着用']
       }
     ]
   },
